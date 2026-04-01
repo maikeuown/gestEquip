@@ -1,0 +1,496 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  TECHNICIAN
+  TEACHER
+  STAFF
+}
+
+enum EquipmentStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+  RETIRED
+  LOST
+  STOLEN
+}
+
+enum MaintenanceStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_PARTS
+  RESOLVED
+  CLOSED
+  CANCELLED
+}
+
+enum MaintenancePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum MovementType {
+  CHECK_IN
+  CHECK_OUT
+  TRANSFER
+  LOAN
+  RETURN
+}
+
+enum MovementStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  ERROR
+  SUCCESS
+  MAINTENANCE
+  MOVEMENT
+  TICKET
+  SYSTEM
+}
+
+enum AttachmentType {
+  IMAGE
+  DOCUMENT
+  OTHER
+}
+
+model Institution {
+  id          String    @id @default(uuid())
+  name        String
+  shortName   String    @map("short_name")
+  taxId       String?   @unique @map("tax_id")
+  email       String?
+  phone       String?
+  address     String?
+  city        String?
+  postalCode  String?   @map("postal_code")
+  country     String    @default("Portugal")
+  logoUrl     String?   @map("logo_url")
+  website     String?
+  isActive    Boolean   @default(true) @map("is_active")
+  settings    Json?     @default("{}")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  users               User[]
+  rooms               Room[]
+  equipment           Equipment[]
+  equipmentTypes      EquipmentType[]
+  maintenanceTickets  MaintenanceTicket[]
+  movements           Movement[]
+  requests            Request[]
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+  schedules           Schedule[]
+  assistanceRequests  AssistanceRequest[]
+
+  @@map("institutions")
+}
+
+model User {
+  id               String    @id @default(uuid())
+  institutionId    String    @map("institution_id")
+  email            String    @unique
+  passwordHash     String    @map("password_hash")
+  firstName        String    @map("first_name")
+  lastName         String    @map("last_name")
+  phone            String?
+  avatarUrl        String?   @map("avatar_url")
+  role             UserRole  @default(STAFF)
+  isActive         Boolean   @default(true) @map("is_active")
+  lastLoginAt      DateTime? @map("last_login_at")
+  emailVerifiedAt  DateTime? @map("email_verified_at")
+  settings         Json?     @default("{}")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  deletedAt        DateTime? @map("deleted_at")
+
+  institution              Institution         @relation(fields: [institutionId], references: [id])
+  assignedEquipment        Equipment[]         @relation("EquipmentAssignee")
+  createdEquipment         Equipment[]         @relation("EquipmentCreator")
+  reportedTickets          MaintenanceTicket[] @relation("TicketReporter")
+  assignedTickets          MaintenanceTicket[] @relation("TicketAssignee")
+  maintenanceLogs          MaintenanceLog[]
+  requestedMovements       Movement[]          @relation("MovementRequester")
+  approvedMovements        Movement[]          @relation("MovementApprover")
+  requests                 Request[]           @relation("RequestCreator")
+  approvedRequests         Request[]           @relation("RequestApprover")
+  sentMessages             Message[]           @relation("MessageSender")
+  notifications            Notification[]
+  auditLogs                AuditLog[]
+  refreshTokens            RefreshToken[]
+  favoriteRooms            FavoriteRoom[]
+  assistanceRequestsCreated AssistanceRequest[] @relation("AssistanceCreator")
+  assistanceRequestsAssigned AssistanceRequest[] @relation("AssistanceAssignee")
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model EquipmentType {
+  id            String    @id @default(uuid())
+  institutionId String    @map("institution_id")
+  name          String
+  description   String?
+  icon          String?
+  fields        Json?     @default("[]")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  institution Institution @relation(fields: [institutionId], references: [id])
+  equipment   Equipment[]
+
+  @@map("equipment_types")
+}
+
+model Room {
+  id            String    @id @default(uuid())
+  institutionId String    @map("institution_id")
+  name          String
+  code          String?
+  building      String?
+  floor         String?
+  description   String?
+  capacity      Int?
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  institution        Institution         @relation(fields: [institutionId], references: [id])
+  equipment          Equipment[]
+  movementsFrom      Movement[]          @relation("MovementFromRoom")
+  movementsTo        Movement[]          @relation("MovementToRoom")
+  schedules          Schedule[]
+  favoriteRooms      FavoriteRoom[]
+  assistanceRequests AssistanceRequest[]
+
+  @@map("rooms")
+}
+
+model Equipment {
+  id              String          @id @default(uuid())
+  institutionId   String          @map("institution_id")
+  equipmentTypeId String          @map("equipment_type_id")
+  roomId          String?         @map("room_id")
+  assignedToId    String?         @map("assigned_to_id")
+  createdById     String          @map("created_by_id")
+  name            String
+  brand           String?
+  model           String?
+  serialNumber    String?         @unique @map("serial_number")
+  inventoryNumber String?         @unique @map("inventory_number")
+  qrCode          String?         @unique @map("qr_code")
+  barcode         String?         @unique
+  status          EquipmentStatus @default(ACTIVE)
+  acquisitionDate DateTime?       @map("acquisition_date")
+  acquisitionCost Decimal?        @db.Decimal(10, 2) @map("acquisition_cost")
+  warrantyExpiry  DateTime?       @map("warranty_expiry")
+  specifications  Json?           @default("{}")
+  notes           String?
+  isActive        Boolean         @default(true) @map("is_active")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  deletedAt       DateTime?       @map("deleted_at")
+
+  institution        Institution       @relation(fields: [institutionId], references: [id])
+  equipmentType      EquipmentType     @relation(fields: [equipmentTypeId], references: [id])
+  room               Room?             @relation(fields: [roomId], references: [id])
+  assignedTo         User?             @relation("EquipmentAssignee", fields: [assignedToId], references: [id])
+  createdBy          User              @relation("EquipmentCreator", fields: [createdById], references: [id])
+  maintenanceTickets MaintenanceTicket[]
+  movements          Movement[]
+  attachments        Attachment[]
+  assistanceRequests AssistanceRequest[]
+
+  @@map("equipment")
+}
+
+model MaintenanceTicket {
+  id            String              @id @default(uuid())
+  institutionId String              @map("institution_id")
+  equipmentId   String              @map("equipment_id")
+  reportedById  String              @map("reported_by_id")
+  assignedToId  String?             @map("assigned_to_id")
+  ticketNumber  String              @unique @map("ticket_number")
+  title         String
+  description   String
+  priority      MaintenancePriority @default(MEDIUM)
+  status        MaintenanceStatus   @default(OPEN)
+  scheduledDate DateTime?           @map("scheduled_date")
+  resolvedAt    DateTime?           @map("resolved_at")
+  estimatedCost Decimal?            @db.Decimal(10, 2) @map("estimated_cost")
+  actualCost    Decimal?            @db.Decimal(10, 2) @map("actual_cost")
+  resolution    String?
+  notes         String?
+  isPreventive  Boolean             @default(false) @map("is_preventive")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+  deletedAt     DateTime?           @map("deleted_at")
+
+  institution Institution    @relation(fields: [institutionId], references: [id])
+  equipment   Equipment      @relation(fields: [equipmentId], references: [id])
+  reportedBy  User           @relation("TicketReporter", fields: [reportedById], references: [id])
+  assignedTo  User?          @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  logs        MaintenanceLog[]
+  messages    Message[]
+  attachments Attachment[]
+
+  @@map("maintenance_tickets")
+}
+
+model MaintenanceLog {
+  id        String             @id @default(uuid())
+  ticketId  String             @map("ticket_id")
+  userId    String             @map("user_id")
+  action    String
+  notes     String?
+  oldStatus MaintenanceStatus? @map("old_status")
+  newStatus MaintenanceStatus? @map("new_status")
+  createdAt DateTime           @default(now()) @map("created_at")
+
+  ticket MaintenanceTicket @relation(fields: [ticketId], references: [id])
+  user   User              @relation(fields: [userId], references: [id])
+
+  @@map("maintenance_logs")
+}
+
+model Movement {
+  id            String         @id @default(uuid())
+  institutionId String         @map("institution_id")
+  equipmentId   String         @map("equipment_id")
+  requestedById String         @map("requested_by_id")
+  approvedById  String?        @map("approved_by_id")
+  fromRoomId    String?        @map("from_room_id")
+  toRoomId      String?        @map("to_room_id")
+  type          MovementType
+  status        MovementStatus @default(PENDING)
+  reason        String?
+  notes         String?
+  scheduledDate DateTime?      @map("scheduled_date")
+  completedAt   DateTime?      @map("completed_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  institution Institution @relation(fields: [institutionId], references: [id])
+  equipment   Equipment   @relation(fields: [equipmentId], references: [id])
+  requestedBy User        @relation("MovementRequester", fields: [requestedById], references: [id])
+  approvedBy  User?       @relation("MovementApprover", fields: [approvedById], references: [id])
+  fromRoom    Room?       @relation("MovementFromRoom", fields: [fromRoomId], references: [id])
+  toRoom      Room?       @relation("MovementToRoom", fields: [toRoomId], references: [id])
+
+  @@map("movements")
+}
+
+model Request {
+  id            String        @id @default(uuid())
+  institutionId String        @map("institution_id")
+  createdById   String        @map("created_by_id")
+  approvedById  String?       @map("approved_by_id")
+  title         String
+  description   String
+  status        RequestStatus @default(PENDING)
+  notes         String?
+  approvalNotes String?       @map("approval_notes")
+  dueDate       DateTime?     @map("due_date")
+  completedAt   DateTime?     @map("completed_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  institution Institution @relation(fields: [institutionId], references: [id])
+  createdBy   User        @relation("RequestCreator", fields: [createdById], references: [id])
+  approvedBy  User?       @relation("RequestApprover", fields: [approvedById], references: [id])
+  messages    Message[]
+
+  @@map("requests")
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  senderId  String   @map("sender_id")
+  ticketId  String?  @map("ticket_id")
+  requestId String?  @map("request_id")
+  content   String
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  sender  User               @relation("MessageSender", fields: [senderId], references: [id])
+  ticket  MaintenanceTicket? @relation(fields: [ticketId], references: [id])
+  request Request?           @relation(fields: [requestId], references: [id])
+
+  @@map("messages")
+}
+
+model Notification {
+  id            String           @id @default(uuid())
+  userId        String           @map("user_id")
+  institutionId String           @map("institution_id")
+  type          NotificationType
+  title         String
+  message       String
+  isRead        Boolean          @default(false) @map("is_read")
+  readAt        DateTime?        @map("read_at")
+  data          Json?            @default("{}")
+  link          String?
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  user        User        @relation(fields: [userId], references: [id])
+  institution Institution @relation(fields: [institutionId], references: [id])
+
+  @@map("notifications")
+}
+
+model Attachment {
+  id           String         @id @default(uuid())
+  fileName     String         @map("file_name")
+  originalName String         @map("original_name")
+  mimeType     String         @map("mime_type")
+  size         Int
+  url          String
+  type         AttachmentType @default(OTHER)
+  equipmentId  String?        @map("equipment_id")
+  ticketId     String?        @map("ticket_id")
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  equipment Equipment?         @relation(fields: [equipmentId], references: [id])
+  ticket    MaintenanceTicket? @relation(fields: [ticketId], references: [id])
+
+  @@map("attachments")
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum AssistanceProblem {
+  NOT_TURNING_ON
+  NOT_WORKING
+  CONNECTIVITY_ISSUE
+  AUDIO_PROBLEM
+  DISPLAY_PROBLEM
+  OTHER
+}
+
+model Schedule {
+  id            String    @id @default(uuid())
+  institutionId String    @map("institution_id")
+  roomId        String    @map("room_id")
+  day           DayOfWeek
+  startTime     String    @map("start_time")
+  endTime       String    @map("end_time")
+  subject       String?
+  teacher       String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  institution Institution @relation(fields: [institutionId], references: [id])
+  room        Room        @relation(fields: [roomId], references: [id])
+
+  @@map("schedules")
+}
+
+model FavoriteRoom {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  roomId    String   @map("room_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roomId])
+  @@map("favorite_rooms")
+}
+
+model AssistanceRequest {
+  id            String            @id @default(uuid())
+  institutionId String            @map("institution_id")
+  roomId        String            @map("room_id")
+  equipmentId   String?           @map("equipment_id")
+  createdById   String            @map("created_by_id")
+  assignedToId  String?           @map("assigned_to_id")
+  title         String
+  description   String
+  problemType   AssistanceProblem @map("problem_type")
+  status        RequestStatus     @default(PENDING)
+  resolution    String?
+  resolvedAt    DateTime?         @map("resolved_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  institution Institution @relation(fields: [institutionId], references: [id])
+  room        Room        @relation(fields: [roomId], references: [id])
+  equipment   Equipment?  @relation(fields: [equipmentId], references: [id])
+  createdBy   User        @relation("AssistanceCreator", fields: [createdById], references: [id])
+  assignedTo  User?       @relation("AssistanceAssignee", fields: [assignedToId], references: [id])
+
+  @@map("assistance_requests")
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  institutionId String   @map("institution_id")
+  userId        String?  @map("user_id")
+  action        String
+  entity        String
+  entityId      String?  @map("entity_id")
+  oldValues     Json?    @map("old_values")
+  newValues     Json?    @map("new_values")
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  institution Institution @relation(fields: [institutionId], references: [id])
+  user        User?       @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
