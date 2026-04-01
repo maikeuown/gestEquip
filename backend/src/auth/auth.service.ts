@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, BadRequestException, ConflictExcepti
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { OAuth2Client } from 'google-auth-library';
 import * as argon2 from 'argon2';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -72,6 +73,76 @@ export class AuthService {
   async logout(userId: string) {
     await this.prisma.refreshToken.deleteMany({ where: { userId } });
     return { message: 'Sessão terminada com sucesso' };
+  }
+
+  async googleAuth(idToken: string) {
+    const googleClientId = this.configService.get<string>('google.clientId');
+    const client = new OAuth2Client(googleClientId);
+
+    let payload: any;
+    try {
+      const ticket = await client.verifyIdToken({
+        idToken,
+        audience: googleClientId,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException('Token Google inválido');
+    }
+
+    if (!payload?.email) {
+      throw new UnauthorizedException('Não foi possível obter o email da conta Google');
+    }
+
+    // Check if user exists by googleId or email
+    let user = await this.prisma.user.findFirst({
+      where: { OR: [{ googleId: payload.sub }, { email: payload.email.toLowerCase() }] },
+      include: { institution: true },
+    });
+
+    if (user && !user.googleId) {
+      // Link existing email account to Google
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { googleId: payload.sub, avatarUrl: user.avatarUrl || payload.picture },
+        include: { institution: true },
+      });
+    }
+
+    if (!user) {
+      // Auto-register: assign to the first active institution
+      const institution = await this.prisma.institution.findFirst({ where: { isActive: true } });
+      if (!institution) throw new BadRequestException('Nenhuma instituição disponível para registo');
+
+      user = await this.prisma.user.create({
+        data: {
+          email: payload.email.toLowerCase(),
+          googleId: payload.sub,
+          firstName: payload.given_name || payload.name?.split(' ')[0] || 'Utilizador',
+          lastName: payload.family_name || payload.name?.split(' ').slice(1).join(' ') || '',
+          avatarUrl: payload.picture,
+          institutionId: institution.id,
+          role: 'STAFF',
+          isActive: true,
+          emailVerifiedAt: new Date(),
+        },
+        include: { institution: true },
+      });
+    }
+
+    if (!user.isActive) throw new UnauthorizedException('Conta desativada');
+
+    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    const tokens = await this.generateTokens(user.id, user.email, user.role, user.institutionId);
+
+    return {
+      user: {
+        id: user.id, email: user.email, firstName: user.firstName,
+        lastName: user.lastName, role: user.role, institutionId: user.institutionId,
+        institution: user.institution, avatarUrl: user.avatarUrl,
+      },
+      ...tokens,
+    };
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {

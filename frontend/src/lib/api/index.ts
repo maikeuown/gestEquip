@@ -3,6 +3,7 @@ import api from './client';
 // Auth
 export const authApi = {
   login: (data: { email: string; password: string }) => api.post('/auth/login', data),
+  google: (idToken: string) => api.post('/auth/google', { idToken }),
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
   changePassword: (data: { currentPassword: string; newPassword: string }) => api.post('/auth/change-password', data),

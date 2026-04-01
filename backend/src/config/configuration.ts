@@ -10,6 +10,9 @@ export default () => ({
     refreshSecret: process.env.JWT_REFRESH_SECRET || 'refresh-secret',
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
   },
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || '',
+  },
   smtp: {
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT, 10) || 587,

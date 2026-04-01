@@ -26,6 +26,12 @@ export class AuthController {
   register(@Body() dto: RegisterDto) { return this.authService.register(dto); }
 
   @Public()
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Autenticar com Google' })
+  googleAuth(@Body('idToken') idToken: string) { return this.authService.googleAuth(idToken); }
+
+  @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Renovar token' })
