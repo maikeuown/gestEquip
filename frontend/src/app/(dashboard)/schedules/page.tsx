@@ -53,7 +53,7 @@ export default function SchedulesPage() {
           roomsApi.list(),
         ]);
         setSchedules(schedulesData);
-        const roomMap = new Map(roomsData.map((r: Room) => [r.id, r]));
+        const roomMap = new Map<string, Room>(roomsData.map((r: Room) => [r.id, r]));
         setRooms(roomMap);
       } catch (err) {
         console.error(err);

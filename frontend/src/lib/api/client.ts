@@ -1,11 +1,11 @@
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 
-const api = axios.create({
+const instance = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1',
   headers: { 'Content-Type': 'application/json' },
 });
 
-api.interceptors.request.use((config) => {
+instance.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('accessToken');
     if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -13,7 +13,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-api.interceptors.response.use(
+instance.interceptors.response.use(
   (res) => res.data?.data ?? res.data,
   async (err) => {
     if (err.response?.status === 401 && typeof window !== 'undefined') {
@@ -24,5 +24,18 @@ api.interceptors.response.use(
     return Promise.reject(err.response?.data || err);
   }
 );
+
+const api = {
+  get: <T = any>(url: string, config?: AxiosRequestConfig) =>
+    instance.get(url, config) as Promise<T>,
+  post: <T = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
+    instance.post(url, data, config) as Promise<T>,
+  put: <T = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
+    instance.put(url, data, config) as Promise<T>,
+  patch: <T = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
+    instance.patch(url, data, config) as Promise<T>,
+  delete: <T = any>(url: string, config?: AxiosRequestConfig) =>
+    instance.delete(url, config) as Promise<T>,
+};
 
 export default api;

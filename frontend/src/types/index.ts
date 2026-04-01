@@ -25,7 +25,7 @@ export interface EquipmentType {
 
 export interface Room {
   id: string; name: string; code?: string; building?: string; floor?: string; description?: string;
-  capacity?: number; institutionId: string; _count?: { equipment: number };
+  capacity?: number; institutionId: string; equipment?: Equipment[]; _count?: { equipment: number };
 }
 
 export interface Equipment {

@@ -53,7 +53,7 @@ const btnGhost = "text-gray-700 hover:bg-gray-100";
 export default function EquipmentPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const menuRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLTableCellElement>(null);
   
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [loading, setLoading] = useState(true);
