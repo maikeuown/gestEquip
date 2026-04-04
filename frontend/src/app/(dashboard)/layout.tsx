@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import Sidebar from '@/components/layout/Sidebar';
+import ChatWidget from '@/components/chat/ChatWidget';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isHydrated, user } = useAuthStore();
@@ -42,6 +43,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <main className="flex-1 overflow-y-auto bg-gray-50">
         {children}
       </main>
+      <ChatWidget />
     </div>
   );
 }

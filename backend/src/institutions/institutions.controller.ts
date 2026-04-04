@@ -15,11 +15,12 @@ import { UserRole } from '@prisma/client';
 export class InstitutionsController {
   constructor(private readonly institutionsService: InstitutionsService) {}
 
-  @Get() @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Get()
   findAll(@CurrentUser() user: any) {
-    return user.role === UserRole.SUPER_ADMIN
-      ? this.institutionsService.findAll()
-      : this.institutionsService.findOne(user.institutionId);
+    // SUPER_ADMIN and ADMIN see filtered results; TEACHER/STAFF/TECHNICIAN see all (for onboarding selection)
+    if (user?.role === UserRole.SUPER_ADMIN) return this.institutionsService.findAll();
+    if (user?.role === UserRole.ADMIN) return this.institutionsService.findOne(user.institutionId);
+    return this.institutionsService.findAll();
   }
 
   @Get(':id') findOne(@Param('id') id: string) { return this.institutionsService.findOne(id); }

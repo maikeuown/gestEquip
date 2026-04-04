@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, UseGuards, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -38,4 +38,18 @@ export class UsersController {
 
   @Patch(':id/toggle-active') @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   toggleActive(@Param('id') id: string) { return this.usersService.toggleActive(id); }
+
+  @ApiOperation({ summary: 'Self role confirmation — only when roleConfirmed is false' })
+  @Patch('me/confirm-role')
+  async confirmRoleSelf(
+    @CurrentUser() user: any,
+    @Body() dto: { role: UserRole; roleConfirmed: boolean; institutionId?: string },
+  ) {
+    if (!user) throw new ForbiddenException('Não autenticado');
+    if (user.roleConfirmed) throw new BadRequestException('Função já foi confirmada');
+    if (!dto.role || !['TEACHER', 'STAFF'].includes(dto.role)) {
+      throw new BadRequestException('Função inválida. Apenas TEACHER ou STAFF são permitidos.');
+    }
+    return this.usersService.confirmRoleSelf(user.id, dto.role, dto.institutionId);
+  }
 }

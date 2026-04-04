@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as argon2 from 'argon2';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -63,5 +63,14 @@ export class UsersService {
     if (!user) throw new NotFoundException('Utilizador não encontrado');
     const updated = await this.prisma.user.update({ where: { id }, data: { isActive: !user.isActive } });
     return { isActive: updated.isActive };
+  }
+
+  async confirmRoleSelf(id: string, role: UserRole, institutionId?: string) {
+    const user = await this.prisma.user.findFirst({ where: { id, deletedAt: null } });
+    if (!user) throw new NotFoundException('Utilizador não encontrado');
+    if (user.roleConfirmed) throw new BadRequestException('Função já foi confirmada');
+    const data: any = { role, roleConfirmed: true };
+    if (institutionId) data.institutionId = institutionId;
+    return this.prisma.user.update({ where: { id }, data, select: userSelect });
   }
 }
