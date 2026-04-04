@@ -7,6 +7,8 @@ import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { UploadService } from './upload.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
+const uploadDir = process.env.VERCEL ? '/tmp/uploads' : './uploads';
+
 @ApiTags('upload') @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('upload')
@@ -17,7 +19,7 @@ export class UploadController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file', {
     storage: diskStorage({
-      destination: './uploads',
+      destination: uploadDir,
       filename: (req, file, cb) => cb(null, `${uuidv4()}${extname(file.originalname)}`),
     }),
     limits: { fileSize: 10 * 1024 * 1024 },

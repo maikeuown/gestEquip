@@ -7,6 +7,10 @@ import { roomsApi, equipmentApi, typesApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import Header from '@/components/layout/Header';
 import Modal from '@/components/ui/Modal';
+import { FormInput } from '@/components/ui/FormInput';
+import { FormSelect } from '@/components/ui/FormSelect';
+import { FormTextarea } from '@/components/ui/FormTextarea';
+import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import type { Room, Equipment, EquipmentType } from '@/types';
 import toast from 'react-hot-toast';
@@ -193,7 +197,7 @@ export default function RoomDetailPage() {
 }
 
 function RoomEditForm({ open, onClose, room, onSaved }: { open: boolean; onClose: () => void; room: Room; onSaved: () => void }) {
-  const { register, handleSubmit, formState: { isSubmitting } } = useForm({ defaultValues: room });
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({ defaultValues: room });
 
   const onSubmit = async (data: any) => {
     try {
@@ -206,17 +210,17 @@ function RoomEditForm({ open, onClose, room, onSaved }: { open: boolean; onClose
   return (
     <Modal open={open} onClose={onClose} title="Editar Sala" size="md">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div><label className="label">Nome *</label><input {...register('name', { required: true })} className="input" /></div>
+        <FormInput label="Nome" required {...register('name', { required: true })} error={errors.name?.message as string} />
         <div className="grid grid-cols-2 gap-4">
-          <div><label className="label">Código</label><input {...register('code')} className="input" /></div>
-          <div><label className="label">Edifício</label><input {...register('building')} className="input" /></div>
-          <div><label className="label">Piso</label><input {...register('floor')} className="input" /></div>
-          <div><label className="label">Capacidade</label><input {...register('capacity', { valueAsNumber: true })} type="number" className="input" /></div>
+          <FormInput label="Código" {...register('code')} />
+          <FormInput label="Edifício" {...register('building')} />
+          <FormInput label="Piso" {...register('floor')} />
+          <FormInput label="Capacidade" {...register('capacity', { valueAsNumber: true })} type="number" />
         </div>
-        <div><label className="label">Descrição</label><textarea {...register('description')} className="input" rows={2} /></div>
+        <FormTextarea label="Descrição" {...register('description')} rows={2} />
         <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
-          <button type="submit" disabled={isSubmitting} className="btn-primary"><Save className="w-4 h-4" /> {isSubmitting ? 'A guardar...' : 'Guardar'}</button>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button type="submit" loading={isSubmitting}><Save className="w-4 h-4" /> {isSubmitting ? 'A guardar...' : 'Guardar'}</Button>
         </div>
       </form>
     </Modal>
@@ -227,7 +231,7 @@ function EquipmentInRoomForm({ open, onClose, equipment, roomId, types, rooms, o
   open: boolean; onClose: () => void; equipment: Equipment | null; roomId: string;
   types: EquipmentType[]; rooms: Room[]; onSaved: () => void;
 }) {
-  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm({ defaultValues: equipment ? { ...equipment, roomId } : { roomId } });
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm({ defaultValues: (equipment as any) || { roomId } });
   useEffect(() => { reset(equipment ? { ...equipment, roomId } : { roomId }); }, [equipment, roomId, reset]);
 
   const onSubmit = async (data: any) => {
@@ -242,19 +246,31 @@ function EquipmentInRoomForm({ open, onClose, equipment, roomId, types, rooms, o
   return (
     <Modal open={open} onClose={onClose} title={equipment ? 'Editar Equipamento' : 'Adicionar Equipamento à Sala'} size="lg">
       <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-2 gap-4">
-        <div className="col-span-2"><label className="label">Nome *</label><input {...register('name', { required: true })} className="input" /></div>
-        <div><label className="label">Tipo *</label><select {...register('equipmentTypeId', { required: true })} className="select"><option value="">Selecionar...</option>{types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
-        <div><label className="label">Sala</label><select {...register('roomId')} className="select"><option value="">Sem sala</option>{rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></div>
-        <div><label className="label">Marca</label><input {...register('brand')} className="input" /></div>
-        <div><label className="label">Modelo</label><input {...register('model')} className="input" /></div>
-        <div><label className="label">Nº Série</label><input {...register('serialNumber')} className="input" /></div>
-        <div><label className="label">Nº Inventário</label><input {...register('inventoryNumber')} className="input" /></div>
-        <div><label className="label">Estado</label><select {...register('status')} className="select">{['ACTIVE','INACTIVE','MAINTENANCE','RETIRED','LOST','STOLEN'].map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-        <div><label className="label">Data Aquisição</label><input {...register('acquisitionDate')} type="date" className="input" /></div>
-        <div className="col-span-2"><label className="label">Notas</label><textarea {...register('notes')} className="input" rows={2} /></div>
+        <div className="col-span-2">
+          <FormInput label="Nome" required {...register('name', { required: true })} error={errors.name?.message as string} />
+        </div>
+        <FormSelect label="Tipo" required {...register('equipmentTypeId', { required: true })} error={errors.equipmentTypeId?.message as string}>
+          <option value="">Selecionar...</option>
+          {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </FormSelect>
+        <FormSelect label="Sala" {...register('roomId')}>
+          <option value="">Sem sala</option>
+          {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </FormSelect>
+        <FormInput label="Marca" {...register('brand')} />
+        <FormInput label="Modelo" {...register('model')} />
+        <FormInput label="Nº Série" {...register('serialNumber')} />
+        <FormInput label="Nº Inventário" {...register('inventoryNumber')} />
+        <FormSelect label="Estado" {...register('status')}>
+          {['ACTIVE','INACTIVE','MAINTENANCE','RETIRED','LOST','STOLEN'].map(s => <option key={s} value={s}>{s}</option>)}
+        </FormSelect>
+        <FormInput label="Data Aquisição" {...register('acquisitionDate')} type="date" />
+        <div className="col-span-2">
+          <FormTextarea label="Notas" {...register('notes')} rows={2} />
+        </div>
         <div className="col-span-2 flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
-          <button type="submit" disabled={isSubmitting} className="btn-primary">{isSubmitting ? 'A guardar...' : 'Guardar'}</button>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button type="submit" loading={isSubmitting}>{isSubmitting ? 'A guardar...' : 'Guardar'}</Button>
         </div>
       </form>
     </Modal>

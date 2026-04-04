@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import Header from '@/components/layout/Header';
+import { FormInput } from '@/components/ui/FormInput';
+import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -47,24 +49,30 @@ export default function SettingsPage() {
         <div className="card p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Alterar Palavra-passe</h2>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-sm">
-            <div>
-              <label className="label">Palavra-passe atual</label>
-              <input {...register('currentPassword')} type="password" className="input" />
-              {errors.currentPassword && <p className="text-red-500 text-xs mt-1">{errors.currentPassword.message as string}</p>}
-            </div>
-            <div>
-              <label className="label">Nova palavra-passe</label>
-              <input {...register('newPassword')} type="password" className="input" />
-              {errors.newPassword && <p className="text-red-500 text-xs mt-1">{errors.newPassword.message as string}</p>}
-            </div>
-            <div>
-              <label className="label">Confirmar nova palavra-passe</label>
-              <input {...register('confirmPassword')} type="password" className="input" />
-              {errors.confirmPassword && <p className="text-red-500 text-xs mt-1">{errors.confirmPassword.message as string}</p>}
-            </div>
-            <button type="submit" disabled={isSubmitting} className="btn-primary">
+            <FormInput
+              label="Palavra-passe atual"
+              type="password"
+              required
+              {...register('currentPassword')}
+              error={errors.currentPassword?.message as string}
+            />
+            <FormInput
+              label="Nova palavra-passe"
+              type="password"
+              required
+              {...register('newPassword')}
+              error={errors.newPassword?.message as string}
+            />
+            <FormInput
+              label="Confirmar nova palavra-passe"
+              type="password"
+              required
+              {...register('confirmPassword')}
+              error={errors.confirmPassword?.message as string}
+            />
+            <Button type="submit" loading={isSubmitting}>
               {isSubmitting ? 'A alterar...' : 'Alterar Palavra-passe'}
-            </button>
+            </Button>
           </form>
         </div>
       </div>

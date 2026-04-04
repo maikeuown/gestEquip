@@ -35,7 +35,7 @@ export class AuthService {
       user: {
         id: user.id, email: user.email, firstName: user.firstName,
         lastName: user.lastName, role: user.role, institutionId: user.institutionId,
-        institution: user.institution, avatarUrl: user.avatarUrl,
+        institution: user.institution, avatarUrl: user.avatarUrl, roleConfirmed: user.roleConfirmed,
       },
       ...tokens,
     };
@@ -65,7 +65,7 @@ export class AuthService {
     await this.prisma.refreshToken.delete({ where: { id: stored.id } });
     const tokens = await this.generateTokens(stored.user.id, stored.user.email, stored.user.role, stored.user.institutionId);
     return {
-      user: { id: stored.user.id, email: stored.user.email, firstName: stored.user.firstName, lastName: stored.user.lastName, role: stored.user.role, institutionId: stored.user.institutionId, institution: stored.user.institution },
+      user: { id: stored.user.id, email: stored.user.email, firstName: stored.user.firstName, lastName: stored.user.lastName, role: stored.user.role, institutionId: stored.user.institutionId, institution: stored.user.institution, roleConfirmed: stored.user.roleConfirmed },
       ...tokens,
     };
   }
@@ -139,7 +139,7 @@ export class AuthService {
       user: {
         id: user.id, email: user.email, firstName: user.firstName,
         lastName: user.lastName, role: user.role, institutionId: user.institutionId,
-        institution: user.institution, avatarUrl: user.avatarUrl,
+        institution: user.institution, avatarUrl: user.avatarUrl, roleConfirmed: user.roleConfirmed,
       },
       ...tokens,
     };

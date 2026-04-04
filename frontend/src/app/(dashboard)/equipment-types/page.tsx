@@ -5,6 +5,9 @@ import { typesApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import Header from '@/components/layout/Header';
 import Modal from '@/components/ui/Modal';
+import { FormInput } from '@/components/ui/FormInput';
+import { FormTextarea } from '@/components/ui/FormTextarea';
+import { Button } from '@/components/ui/Button';
 import type { EquipmentType } from '@/types';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
@@ -70,7 +73,7 @@ export default function EquipmentTypesPage() {
 }
 
 function TypeForm({ open, onClose, type, onSaved }: any) {
-  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm({ defaultValues: type || {} });
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm({ defaultValues: type || {} });
   useEffect(() => { reset(type || {}); }, [type, reset]);
 
   const onSubmit = async (data: any) => {
@@ -84,12 +87,12 @@ function TypeForm({ open, onClose, type, onSaved }: any) {
   return (
     <Modal open={open} onClose={onClose} title={type ? 'Editar Tipo' : 'Novo Tipo'} size="md">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div><label className="label">Nome *</label><input {...register('name', { required: true })} className="input" /></div>
-        <div><label className="label">Ícone (emoji)</label><input {...register('icon')} className="input" placeholder="🖥️" /></div>
-        <div><label className="label">Descrição</label><textarea {...register('description')} className="input" rows={2} /></div>
+        <FormInput label="Nome" required {...register('name', { required: true })} error={errors.name?.message as string} />
+        <FormInput label="Ícone (emoji)" {...register('icon')} placeholder="🖥️" />
+        <FormTextarea label="Descrição" {...register('description')} rows={2} />
         <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
-          <button type="submit" disabled={isSubmitting} className="btn-primary">{isSubmitting ? 'A guardar...' : 'Guardar'}</button>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button type="submit" loading={isSubmitting}>{isSubmitting ? 'A guardar...' : 'Guardar'}</Button>
         </div>
       </form>
     </Modal>

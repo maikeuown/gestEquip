@@ -5,6 +5,9 @@ import { usersApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import Header from '@/components/layout/Header';
 import Modal from '@/components/ui/Modal';
+import { FormInput } from '@/components/ui/FormInput';
+import { FormSelect } from '@/components/ui/FormSelect';
+import { Button } from '@/components/ui/Button';
 import type { User } from '@/types';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
@@ -83,7 +86,7 @@ export default function UsersPage() {
 }
 
 function UserForm({ open, onClose, user, onSaved }: any) {
-  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm({ defaultValues: user ? { ...user, password: '' } : {} });
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm({ defaultValues: user ? { ...user, password: '' } : {} });
   useEffect(() => { reset(user ? { ...user, password: '' } : {}); }, [user, reset]);
 
   const onSubmit = async (data: any) => {
@@ -99,16 +102,28 @@ function UserForm({ open, onClose, user, onSaved }: any) {
     <Modal open={open} onClose={onClose} title={user ? 'Editar Utilizador' : 'Novo Utilizador'} size="md">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <div><label className="label">Primeiro Nome *</label><input {...register('firstName', { required: true })} className="input" /></div>
-          <div><label className="label">Apelido *</label><input {...register('lastName', { required: true })} className="input" /></div>
+          <FormInput label="Primeiro Nome" required {...register('firstName', { required: true })} error={errors.firstName?.message as string} />
+          <FormInput label="Apelido" required {...register('lastName', { required: true })} error={errors.lastName?.message as string} />
         </div>
-        <div><label className="label">Email *</label><input {...register('email', { required: true })} type="email" className="input" /></div>
-        <div><label className="label">{user ? 'Nova Palavra-passe (deixar vazio para não alterar)' : 'Palavra-passe *'}</label><input {...register('password', { required: !user })} type="password" className="input" /></div>
-        <div><label className="label">Papel</label><select {...register('role')} className="select"><option value="STAFF">Funcionário</option><option value="TEACHER">Professor</option><option value="TECHNICIAN">Técnico</option><option value="ADMIN">Admin</option><option value="SUPER_ADMIN">Super Admin</option></select></div>
-        <div><label className="label">Telefone</label><input {...register('phone')} className="input" /></div>
+        <FormInput label="Email" required type="email" {...register('email', { required: true })} error={errors.email?.message as string} />
+        <FormInput
+          label={user ? 'Nova Palavra-passe (deixar vazio para não alterar)' : 'Palavra-passe'}
+          required={!user}
+          type="password"
+          {...register('password', { required: !user })}
+          error={errors.password?.message as string}
+        />
+        <FormSelect label="Papel" {...register('role')}>
+          <option value="STAFF">Funcionário</option>
+          <option value="TEACHER">Professor</option>
+          <option value="TECHNICIAN">Técnico</option>
+          <option value="ADMIN">Admin</option>
+          <option value="SUPER_ADMIN">Super Admin</option>
+        </FormSelect>
+        <FormInput label="Telefone" {...register('phone')} />
         <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
-          <button type="submit" disabled={isSubmitting} className="btn-primary">{isSubmitting ? 'A guardar...' : 'Guardar'}</button>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button type="submit" loading={isSubmitting}>{isSubmitting ? 'A guardar...' : 'Guardar'}</Button>
         </div>
       </form>
     </Modal>

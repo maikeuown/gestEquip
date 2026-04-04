@@ -5,6 +5,8 @@ import { institutionsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import Header from '@/components/layout/Header';
 import Modal from '@/components/ui/Modal';
+import { FormInput } from '@/components/ui/FormInput';
+import { Button } from '@/components/ui/Button';
 import type { Institution } from '@/types';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
@@ -71,7 +73,7 @@ export default function InstitutionsPage() {
 }
 
 function InstitutionForm({ open, onClose, institution, onSaved }: any) {
-  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm({ defaultValues: institution || {} });
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm({ defaultValues: institution || {} });
   useEffect(() => { reset(institution || {}); }, [institution, reset]);
 
   const onSubmit = async (data: any) => {
@@ -85,17 +87,21 @@ function InstitutionForm({ open, onClose, institution, onSaved }: any) {
   return (
     <Modal open={open} onClose={onClose} title={institution ? 'Editar Instituição' : 'Nova Instituição'} size="lg">
       <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-2 gap-4">
-        <div className="col-span-2"><label className="label">Nome *</label><input {...register('name', { required: true })} className="input" /></div>
-        <div><label className="label">Abreviatura *</label><input {...register('shortName', { required: true })} className="input" /></div>
-        <div><label className="label">NIF</label><input {...register('taxId')} className="input" /></div>
-        <div><label className="label">Email</label><input {...register('email')} type="email" className="input" /></div>
-        <div><label className="label">Telefone</label><input {...register('phone')} className="input" /></div>
-        <div className="col-span-2"><label className="label">Morada</label><input {...register('address')} className="input" /></div>
-        <div><label className="label">Cidade</label><input {...register('city')} className="input" /></div>
-        <div><label className="label">Código Postal</label><input {...register('postalCode')} className="input" /></div>
+        <div className="col-span-2">
+          <FormInput label="Nome" required {...register('name', { required: true })} error={errors.name?.message as string} />
+        </div>
+        <FormInput label="Abreviatura" required {...register('shortName', { required: true })} error={errors.shortName?.message as string} />
+        <FormInput label="NIF" {...register('taxId')} />
+        <FormInput label="Email" type="email" {...register('email')} />
+        <FormInput label="Telefone" {...register('phone')} />
+        <div className="col-span-2">
+          <FormInput label="Morada" {...register('address')} />
+        </div>
+        <FormInput label="Cidade" {...register('city')} />
+        <FormInput label="Código Postal" {...register('postalCode')} />
         <div className="col-span-2 flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
-          <button type="submit" disabled={isSubmitting} className="btn-primary">{isSubmitting ? 'A guardar...' : 'Guardar'}</button>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button type="submit" loading={isSubmitting}>{isSubmitting ? 'A guardar...' : 'Guardar'}</Button>
         </div>
       </form>
     </Modal>

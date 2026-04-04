@@ -15,7 +15,7 @@ export interface Institution {
 
 export interface User {
   id: string; email: string; firstName: string; lastName: string; phone?: string;
-  role: UserRole; isActive: boolean; avatarUrl?: string; lastLoginAt?: string;
+  role: UserRole; roleConfirmed: boolean; isActive: boolean; avatarUrl?: string; lastLoginAt?: string;
   institutionId: string; institution?: Institution; createdAt: string;
 }
 

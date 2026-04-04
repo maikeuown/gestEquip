@@ -7,7 +7,7 @@ import { UserRole } from '@prisma/client';
 
 const userSelect = {
   id: true, email: true, firstName: true, lastName: true, phone: true,
-  role: true, isActive: true, avatarUrl: true, lastLoginAt: true, createdAt: true, updatedAt: true,
+  role: true, roleConfirmed: true, isActive: true, avatarUrl: true, lastLoginAt: true, createdAt: true, updatedAt: true,
   institution: { select: { id: true, name: true, shortName: true } },
 };
 

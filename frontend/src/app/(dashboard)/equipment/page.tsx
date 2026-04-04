@@ -7,6 +7,10 @@ import { useAuthStore } from '@/store/auth';
 import Header from '@/components/layout/Header';
 import Modal from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
+import { FormInput } from '@/components/ui/FormInput';
+import { FormSelect } from '@/components/ui/FormSelect';
+import { FormTextarea } from '@/components/ui/FormTextarea';
+import { Button } from '@/components/ui/Button';
 import type { Equipment, EquipmentType, Room } from '@/types';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
@@ -134,7 +138,7 @@ export default function EquipmentPage() {
 }
 
 function EquipmentForm({ open, onClose, equipment, types, rooms, onSaved }: any) {
-  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm({ defaultValues: equipment || {} });
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm({ defaultValues: equipment || {} });
   useEffect(() => { reset(equipment || {}); }, [equipment, reset]);
 
   const onSubmit = async (data: any) => {
@@ -149,21 +153,33 @@ function EquipmentForm({ open, onClose, equipment, types, rooms, onSaved }: any)
   return (
     <Modal open={open} onClose={onClose} title={equipment ? 'Editar Equipamento' : 'Novo Equipamento'} size="lg">
       <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-2 gap-4">
-        <div className="col-span-2"><label className="label">Nome *</label><input {...register('name', { required: true })} className="input" /></div>
-        <div><label className="label">Tipo *</label><select {...register('equipmentTypeId', { required: true })} className="select"><option value="">Selecionar...</option>{types.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
-        <div><label className="label">Sala</label><select {...register('roomId')} className="select"><option value="">Sem sala</option>{rooms.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></div>
-        <div><label className="label">Marca</label><input {...register('brand')} className="input" /></div>
-        <div><label className="label">Modelo</label><input {...register('model')} className="input" /></div>
-        <div><label className="label">Nº Série</label><input {...register('serialNumber')} className="input" /></div>
-        <div><label className="label">Nº Inventário</label><input {...register('inventoryNumber')} className="input" /></div>
-        <div><label className="label">Estado</label><select {...register('status')} className="select">{['ACTIVE','INACTIVE','MAINTENANCE','RETIRED','LOST','STOLEN'].map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-        <div><label className="label">Data Aquisição</label><input {...register('acquisitionDate')} type="date" className="input" /></div>
-        <div><label className="label">Custo Aquisição (€)</label><input {...register('acquisitionCost', { valueAsNumber: true })} type="number" step="0.01" className="input" /></div>
-        <div><label className="label">Garantia até</label><input {...register('warrantyExpiry')} type="date" className="input" /></div>
-        <div className="col-span-2"><label className="label">Notas</label><textarea {...register('notes')} className="input" rows={2} /></div>
+        <div className="col-span-2">
+          <FormInput label="Nome" required {...register('name', { required: true })} error={errors.name?.message as string} />
+        </div>
+        <FormSelect label="Tipo" required {...register('equipmentTypeId', { required: true })} error={errors.equipmentTypeId?.message as string}>
+          <option value="">Selecionar...</option>
+          {types.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </FormSelect>
+        <FormSelect label="Sala" {...register('roomId')}>
+          <option value="">Sem sala</option>
+          {rooms.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </FormSelect>
+        <FormInput label="Marca" {...register('brand')} />
+        <FormInput label="Modelo" {...register('model')} />
+        <FormInput label="Nº Série" {...register('serialNumber')} />
+        <FormInput label="Nº Inventário" {...register('inventoryNumber')} />
+        <FormSelect label="Estado" {...register('status')}>
+          {['ACTIVE','INACTIVE','MAINTENANCE','RETIRED','LOST','STOLEN'].map(s => <option key={s} value={s}>{s}</option>)}
+        </FormSelect>
+        <FormInput label="Data Aquisição" {...register('acquisitionDate')} type="date" />
+        <FormInput label="Custo Aquisição (€)" {...register('acquisitionCost', { valueAsNumber: true })} type="number" step="0.01" />
+        <FormInput label="Garantia até" {...register('warrantyExpiry')} type="date" />
+        <div className="col-span-2">
+          <FormTextarea label="Notas" {...register('notes')} rows={2} />
+        </div>
         <div className="col-span-2 flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
-          <button type="submit" disabled={isSubmitting} className="btn-primary">{isSubmitting ? 'A guardar...' : 'Guardar'}</button>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button type="submit" loading={isSubmitting}>{isSubmitting ? 'A guardar...' : 'Guardar'}</Button>
         </div>
       </form>
     </Modal>

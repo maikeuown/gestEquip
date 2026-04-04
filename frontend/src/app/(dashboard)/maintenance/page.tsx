@@ -5,6 +5,10 @@ import { maintenanceApi, equipmentApi, usersApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import Header from '@/components/layout/Header';
 import Modal from '@/components/ui/Modal';
+import { FormInput } from '@/components/ui/FormInput';
+import { FormSelect } from '@/components/ui/FormSelect';
+import { FormTextarea } from '@/components/ui/FormTextarea';
+import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import type { MaintenanceTicket, Equipment, User } from '@/types';
 import toast from 'react-hot-toast';
@@ -99,7 +103,7 @@ export default function MaintenancePage() {
 }
 
 function MaintenanceForm({ open, onClose, equipment, users, onSaved }: any) {
-  const { register, handleSubmit, formState: { isSubmitting } } = useForm();
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm();
   const onSubmit = async (data: any) => {
     try { await maintenanceApi.create(data); toast.success('Ticket criado'); onSaved(); onClose(); }
     catch (e: any) { toast.error(e.message || 'Erro'); }
@@ -107,21 +111,32 @@ function MaintenanceForm({ open, onClose, equipment, users, onSaved }: any) {
   return (
     <Modal open={open} onClose={onClose} title="Novo Ticket de Manutenção" size="lg">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div><label className="label">Equipamento *</label><select {...register('equipmentId', { required: true })} className="select"><option value="">Selecionar...</option>{equipment.map((e: any) => <option key={e.id} value={e.id}>{e.name} ({e.serialNumber || 'sem série'})</option>)}</select></div>
-        <div><label className="label">Título *</label><input {...register('title', { required: true })} className="input" /></div>
-        <div><label className="label">Descrição *</label><textarea {...register('description', { required: true })} className="input" rows={3} /></div>
+        <FormSelect label="Equipamento" required {...register('equipmentId', { required: true })} error={errors.equipmentId?.message as string}>
+          <option value="">Selecionar...</option>
+          {equipment.map((e: any) => <option key={e.id} value={e.id}>{e.name} ({e.serialNumber || 'sem série'})</option>)}
+        </FormSelect>
+        <FormInput label="Título" required {...register('title', { required: true })} error={errors.title?.message as string} />
+        <FormTextarea label="Descrição" required {...register('description', { required: true })} error={errors.description?.message as string} rows={3} />
         <div className="grid grid-cols-2 gap-4">
-          <div><label className="label">Prioridade</label><select {...register('priority')} className="select">{['LOW','MEDIUM','HIGH','CRITICAL'].map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-          <div><label className="label">Atribuir a</label><select {...register('assignedToId')} className="select"><option value="">Ninguém</option>{users.map((u: any) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}</select></div>
+          <FormSelect label="Prioridade" {...register('priority')}>
+            {['LOW','MEDIUM','HIGH','CRITICAL'].map(s => <option key={s} value={s}>{s}</option>)}
+          </FormSelect>
+          <FormSelect label="Atribuir a" {...register('assignedToId')}>
+            <option value="">Ninguém</option>
+            {users.map((u: any) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+          </FormSelect>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <div><label className="label">Data Prevista</label><input {...register('scheduledDate')} type="date" className="input" /></div>
-          <div><label className="label">Custo Estimado (€)</label><input {...register('estimatedCost', { valueAsNumber: true })} type="number" step="0.01" className="input" /></div>
+          <FormInput label="Data Prevista" {...register('scheduledDate')} type="date" />
+          <FormInput label="Custo Estimado (€)" {...register('estimatedCost', { valueAsNumber: true })} type="number" step="0.01" />
         </div>
-        <div className="flex items-center gap-2"><input {...register('isPreventive')} type="checkbox" id="prev" className="rounded" /><label htmlFor="prev" className="text-sm text-gray-700">Manutenção preventiva</label></div>
+        <div className="flex items-center gap-2">
+          <input {...register('isPreventive')} type="checkbox" id="prev" className="rounded" />
+          <label htmlFor="prev" className="text-sm text-gray-700">Manutenção preventiva</label>
+        </div>
         <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
-          <button type="submit" disabled={isSubmitting} className="btn-primary">{isSubmitting ? 'A criar...' : 'Criar Ticket'}</button>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button type="submit" loading={isSubmitting}>{isSubmitting ? 'A criar...' : 'Criar Ticket'}</Button>
         </div>
       </form>
     </Modal>

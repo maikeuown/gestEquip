@@ -5,6 +5,10 @@ import { movementsApi, equipmentApi, roomsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import Header from '@/components/layout/Header';
 import Modal from '@/components/ui/Modal';
+import { FormInput } from '@/components/ui/FormInput';
+import { FormSelect } from '@/components/ui/FormSelect';
+import { FormTextarea } from '@/components/ui/FormTextarea';
+import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import type { Movement, Equipment, Room } from '@/types';
 import toast from 'react-hot-toast';
@@ -91,7 +95,7 @@ export default function MovementsPage() {
 }
 
 function MovementForm({ open, onClose, equipment, rooms, onSaved }: any) {
-  const { register, handleSubmit, formState: { isSubmitting } } = useForm();
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm();
   const onSubmit = async (data: any) => {
     try { await movementsApi.create(data); toast.success('Movimento criado'); onSaved(); onClose(); }
     catch (e: any) { toast.error(e.message || 'Erro'); }
@@ -99,16 +103,28 @@ function MovementForm({ open, onClose, equipment, rooms, onSaved }: any) {
   return (
     <Modal open={open} onClose={onClose} title="Novo Movimento" size="md">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div><label className="label">Equipamento *</label><select {...register('equipmentId', { required: true })} className="select"><option value="">Selecionar...</option>{equipment.map((e: any) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></div>
-        <div><label className="label">Tipo *</label><select {...register('type', { required: true })} className="select"><option value="">Selecionar...</option>{['CHECK_IN','CHECK_OUT','TRANSFER','LOAN','RETURN'].map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+        <FormSelect label="Equipamento" required {...register('equipmentId', { required: true })} error={errors.equipmentId?.message as string}>
+          <option value="">Selecionar...</option>
+          {equipment.map((e: any) => <option key={e.id} value={e.id}>{e.name}</option>)}
+        </FormSelect>
+        <FormSelect label="Tipo" required {...register('type', { required: true })} error={errors.type?.message as string}>
+          <option value="">Selecionar...</option>
+          {['CHECK_IN','CHECK_OUT','TRANSFER','LOAN','RETURN'].map(t => <option key={t} value={t}>{t}</option>)}
+        </FormSelect>
         <div className="grid grid-cols-2 gap-4">
-          <div><label className="label">Sala de Origem</label><select {...register('fromRoomId')} className="select"><option value="">Nenhuma</option>{rooms.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></div>
-          <div><label className="label">Sala de Destino</label><select {...register('toRoomId')} className="select"><option value="">Nenhuma</option>{rooms.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></div>
+          <FormSelect label="Sala de Origem" {...register('fromRoomId')}>
+            <option value="">Nenhuma</option>
+            {rooms.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </FormSelect>
+          <FormSelect label="Sala de Destino" {...register('toRoomId')}>
+            <option value="">Nenhuma</option>
+            {rooms.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </FormSelect>
         </div>
-        <div><label className="label">Motivo</label><textarea {...register('reason')} className="input" rows={2} /></div>
+        <FormTextarea label="Motivo" {...register('reason')} rows={2} />
         <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
-          <button type="submit" disabled={isSubmitting} className="btn-primary">{isSubmitting ? 'A criar...' : 'Criar'}</button>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button type="submit" loading={isSubmitting}>{isSubmitting ? 'A criar...' : 'Criar'}</Button>
         </div>
       </form>
     </Modal>

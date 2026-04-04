@@ -3,6 +3,10 @@ import { useEffect, useState, useRef } from 'react';
 import { ArrowLeft, Send } from 'lucide-react';
 import { maintenanceApi, usersApi } from '@/lib/api';
 import Header from '@/components/layout/Header';
+import { FormSelect } from '@/components/ui/FormSelect';
+import { FormInput } from '@/components/ui/FormInput';
+import { FormTextarea } from '@/components/ui/FormTextarea';
+import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import Link from 'next/link';
 import { format } from 'date-fns';
@@ -78,13 +82,23 @@ export default function MaintenanceDetailPage({ params }: { params: { id: string
                 <h3 className="font-semibold mb-4">Atualizar Ticket</h3>
                 <form onSubmit={handleSubmit(handleUpdate)} className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
-                    <div><label className="label">Estado</label><select {...register('status')} defaultValue={ticket.status} className="select">{['OPEN','IN_PROGRESS','WAITING_PARTS','RESOLVED','CLOSED','CANCELLED'].map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                    <div><label className="label">Prioridade</label><select {...register('priority')} defaultValue={ticket.priority} className="select">{['LOW','MEDIUM','HIGH','CRITICAL'].map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                    <div><label className="label">Atribuir a</label><select {...register('assignedToId')} defaultValue={ticket.assignedToId || ''} className="select"><option value="">Ninguém</option>{users.map((u: any) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}</select></div>
-                    <div><label className="label">Custo Real (€)</label><input {...register('actualCost', { valueAsNumber: true })} defaultValue={ticket.actualCost as any} type="number" step="0.01" className="input" /></div>
+                    <FormSelect label="Estado" {...register('status')} defaultValue={ticket.status}>
+                      {['OPEN','IN_PROGRESS','WAITING_PARTS','RESOLVED','CLOSED','CANCELLED'].map(s => <option key={s} value={s}>{s}</option>)}
+                    </FormSelect>
+                    <FormSelect label="Prioridade" {...register('priority')} defaultValue={ticket.priority}>
+                      {['LOW','MEDIUM','HIGH','CRITICAL'].map(s => <option key={s} value={s}>{s}</option>)}
+                    </FormSelect>
+                    <FormSelect label="Atribuir a" {...register('assignedToId')} defaultValue={ticket.assignedToId || ''}>
+                      <option value="">Ninguém</option>
+                      {users.map((u: any) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+                    </FormSelect>
+                    <FormInput label="Custo Real (€)" {...register('actualCost', { valueAsNumber: true })} defaultValue={ticket.actualCost as any} type="number" step="0.01" />
                   </div>
-                  <div><label className="label">Resolução</label><textarea {...register('resolution')} defaultValue={ticket.resolution || ''} className="input" rows={2} /></div>
-                  <div className="flex gap-2"><button type="submit" disabled={isSubmitting} className="btn-primary btn-sm">Guardar</button><button type="button" onClick={() => setEditing(false)} className="btn-secondary btn-sm">Cancelar</button></div>
+                  <FormTextarea label="Resolução" {...register('resolution')} defaultValue={ticket.resolution || ''} rows={2} />
+                  <div className="flex gap-2">
+                    <Button type="submit" size="sm" loading={isSubmitting}>Guardar</Button>
+                    <Button type="button" variant="secondary" size="sm" onClick={() => setEditing(false)}>Cancelar</Button>
+                  </div>
                 </form>
               </div>
             )}

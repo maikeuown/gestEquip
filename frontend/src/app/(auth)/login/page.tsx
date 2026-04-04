@@ -8,6 +8,8 @@ import toast from 'react-hot-toast';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { Eye, EyeOff, Monitor, Laptop, Shield, BarChart3 } from 'lucide-react';
+import { FormInput } from '@/components/ui/FormInput';
+import { Button } from '@/components/ui/Button';
 
 const schema = z.object({
   email: z.string().email('Email inválido'),
@@ -26,6 +28,14 @@ export default function LoginPage() {
   const handleAuthSuccess = useCallback((res: any) => {
     setAuth(res.user, res.accessToken, res.refreshToken);
     toast.success(`Bem-vindo, ${res.user.firstName}!`);
+    // Check if user needs role confirmation
+    if (
+      (res.user.role === 'TEACHER' || res.user.role === 'STAFF') &&
+      !res.user.roleConfirmed
+    ) {
+      router.replace('/onboarding/role');
+      return;
+    }
     const redirectUrl = res.user.role === 'TEACHER' ? '/schedules' : '/dashboard';
     router.replace(redirectUrl);
   }, [setAuth, router]);
@@ -148,56 +158,39 @@ export default function LoginPage() {
 
           {/* Email/Password form */}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
-              <input
-                {...register('email')}
-                type="email"
-                className="block w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                placeholder="nome@instituicao.pt"
-                autoComplete="email"
+            <FormInput
+              label="Email"
+              type="email"
+              placeholder="nome@instituicao.pt"
+              autoComplete="email"
+              required
+              {...register('email')}
+              error={errors.email?.message}
+            />
+
+            <div className="relative">
+              <FormInput
+                id="password"
+                label="Palavra-passe"
+                type={showPw ? 'text' : 'password'}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                required
+                {...register('password')}
+                error={errors.password?.message}
               />
-              {errors.email && <p className="text-red-500 text-xs mt-1.5">{errors.email.message}</p>}
+              <button
+                type="button"
+                onClick={() => setShowPw(!showPw)}
+                className="absolute right-3 top-[38px] text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-sm font-medium text-gray-700">Palavra-passe</label>
-              </div>
-              <div className="relative">
-                <input
-                  {...register('password')}
-                  type={showPw ? 'text' : 'password'}
-                  className="block w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 pr-10 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPw(!showPw)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {errors.password && <p className="text-red-500 text-xs mt-1.5">{errors.password.message}</p>}
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
-            >
-              {isSubmitting ? (
-                <>
-                  <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  A entrar...
-                </>
-              ) : 'Entrar'}
-            </button>
+            <Button type="submit" loading={isSubmitting} className="w-full mt-2">
+              {isSubmitting ? 'A entrar...' : 'Entrar'}
+            </Button>
           </form>
 
           {/* Demo credentials */}

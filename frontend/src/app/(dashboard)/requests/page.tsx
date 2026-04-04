@@ -5,6 +5,9 @@ import { requestsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import Header from '@/components/layout/Header';
 import Modal from '@/components/ui/Modal';
+import { FormInput } from '@/components/ui/FormInput';
+import { FormTextarea } from '@/components/ui/FormTextarea';
+import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import type { Request } from '@/types';
 import toast from 'react-hot-toast';
@@ -39,7 +42,7 @@ export default function RequestsPage() {
 
   return (
     <div>
-      <Header title="Pedidos" />
+      <Header title="Requisições" />
       <div className="p-6">
         <div className="page-header">
           <div className="flex items-center gap-3">
@@ -88,20 +91,20 @@ export default function RequestsPage() {
 }
 
 function RequestForm({ open, onClose, onSaved }: any) {
-  const { register, handleSubmit, formState: { isSubmitting } } = useForm();
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm();
   const onSubmit = async (data: any) => {
     try { await requestsApi.create(data); toast.success('Pedido criado'); onSaved(); onClose(); }
     catch (e: any) { toast.error(e.message || 'Erro'); }
   };
   return (
-    <Modal open={open} onClose={onClose} title="Novo Pedido" size="md">
+    <Modal open={open} onClose={onClose} title="Nova Requisição" size="md">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div><label className="label">Título *</label><input {...register('title', { required: true })} className="input" /></div>
-        <div><label className="label">Descrição *</label><textarea {...register('description', { required: true })} className="input" rows={4} /></div>
-        <div><label className="label">Prazo</label><input {...register('dueDate')} type="date" className="input" /></div>
+        <FormInput label="Título" required {...register('title', { required: true })} error={errors.title?.message as string} />
+        <FormTextarea label="Descrição" required {...register('description', { required: true })} error={errors.description?.message as string} rows={4} />
+        <FormInput label="Prazo" {...register('dueDate')} type="date" />
         <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
-          <button type="submit" disabled={isSubmitting} className="btn-primary">{isSubmitting ? 'A criar...' : 'Criar'}</button>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button type="submit" loading={isSubmitting}>{isSubmitting ? 'A criar...' : 'Criar'}</Button>
         </div>
       </form>
     </Modal>

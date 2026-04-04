@@ -74,6 +74,7 @@ export const usersApi = {
   update: (id: string, data: any) => api.put(`/users/${id}`, data),
   delete: (id: string) => api.delete(`/users/${id}`),
   toggleActive: (id: string) => api.patch(`/users/${id}/toggle-active`),
+  confirmRole: (id: string, role: 'TEACHER' | 'STAFF') => api.put(`/users/${id}`, { role, roleConfirmed: true }),
 };
 
 // Institutions
