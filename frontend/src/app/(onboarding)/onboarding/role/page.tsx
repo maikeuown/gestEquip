@@ -67,8 +67,8 @@ export default function RoleSelectionPage() {
     const fetch = async () => {
       setLoadingInstitutions(true);
       try {
-        const res = await institutionsApi.list();
-        setInstitutions(res.data);
+        const data = await institutionsApi.list();
+        setInstitutions(Array.isArray(data) ? data : []);
       } catch {
         toast.error('Erro ao carregar instituições.');
       } finally {
