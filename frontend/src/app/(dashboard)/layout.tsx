@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import Sidebar from '@/components/layout/Sidebar';
 import ChatWidget from '@/components/chat/ChatWidget';
+import { ChatProvider } from '@/contexts/ChatContext';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isHydrated, user } = useAuthStore();
@@ -38,12 +39,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto bg-gray-50">
-        {children}
-      </main>
-      <ChatWidget />
-    </div>
+    <ChatProvider>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar />
+        <main className="flex-1 overflow-y-auto bg-gray-50">
+          {children}
+        </main>
+        <ChatWidget />
+      </div>
+    </ChatProvider>
   );
 }
