@@ -95,93 +95,92 @@ export function useChat() {
     isTrackedRef.current = false;
   }, []);
 
-  // ── Schedule a reconnect (exponential backoff, capped at 15 s) ──
-  const scheduleReconnect = useCallback(
-    (attempt: number) => {
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      const delay = Math.min(1000 * Math.pow(2, attempt), 15000);
-      reconnectTimeoutRef.current = setTimeout(() => {
-        if (user && channelRef.current && !isSubscribedRef.current) {
-          subscribeChannel(user, attempt + 1);
-        }
-      }, delay);
-    },
-    [user],
-  );
+  // ── Ref so reconnect can reference the latest user without stale closure ──
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
 
   // ── Core subscribe helper ──
-  function subscribeChannel(currentUser: typeof user, attempt = 0) {
-    if (!currentUser || isSubscribedRef.current) return;
+  const subscribeChannel = useCallback((currentUser: NonNullable<typeof user>, attempt = 0) => {
+    // Tear down any leftover channel before creating a fresh one
+    const old = channelRef.current;
+    if (old) {
+      try { old.untrack().catch(() => {}); } catch { /* ignore */ }
+      try { supabase.removeChannel(old); } catch { /* ignore */ }
+      channelRef.current = null;
+    }
+    isSubscribedRef.current = false;
+    isTrackedRef.current = false;
 
     const channel = createChatChannel();
     channelRef.current = channel;
 
-    // ── Presence events (supabase-js v2 uses 'presence' type for join/leave/sync) ──
-    channel.on('presence', { event: 'sync' }, () => {
-      applyPeerList(getFilteredPeers());
-    });
-    channel.on('presence', { event: 'join' }, () => {
-      applyPeerList(getFilteredPeers());
-    });
-    channel.on('presence', { event: 'leave' }, () => {
-      applyPeerList(getFilteredPeers());
-    });
+    // ── ALL listeners BEFORE subscribe() ──
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        applyPeerList(getFilteredPeers());
+      })
+      .on('presence', { event: 'join' }, () => {
+        applyPeerList(getFilteredPeers());
+      })
+      .on('presence', { event: 'leave' }, () => {
+        applyPeerList(getFilteredPeers());
+      })
+      .on('broadcast', { event: 'chat:message' }, (payload) => {
+        const msg = payload.payload as {
+          fromUserId: string;
+          fromName: string;
+          content: string;
+          timestamp: string;
+        };
+        if (!msg?.fromUserId) return;
 
-    // ── Broadcast: receive chat message ──
-    channel.on('broadcast', { event: 'chat:message' }, (payload) => {
-      const msg = payload.payload as {
-        fromUserId: string;
-        fromName: string;
-        content: string;
-        timestamp: string;
-      };
-      if (!msg?.fromUserId) return;
+        setConversations((prev) => {
+          const next = new Map(prev);
+          const existing = next.get(msg.fromUserId) || [];
+          next.set(msg.fromUserId, [...existing, { ...msg, isOwn: false }]);
+          return next;
+        });
 
-      setConversations((prev) => {
-        const next = new Map(prev);
-        const existing = next.get(msg.fromUserId) || [];
-        next.set(msg.fromUserId, [...existing, { ...msg, isOwn: false }]);
-        return next;
-      });
-
-      setOpenConversations((open) => {
-        if (!open.has(msg.fromUserId)) {
-          setUnreadCounts((prev) => {
-            const next = new Map(prev);
-            next.set(msg.fromUserId, (next.get(msg.fromUserId) || 0) + 1);
-            return next;
-          });
-        }
-        return open;
-      });
-    });
-
-    // ── Subscribe ──
-    channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        isSubscribedRef.current = true;
-
-        // Track presence exactly once
-        if (!isTrackedRef.current) {
-          isTrackedRef.current = true;
-          channel
-            .track({
-              userId: currentUser.id,
-              name: `${currentUser.firstName} ${currentUser.lastName}`,
-              role: currentUser.role,
-            })
-            .catch((err) => {
-              console.warn('[chat] track failed', err);
+        setOpenConversations((open) => {
+          if (!open.has(msg.fromUserId)) {
+            setUnreadCounts((prev) => {
+              const next = new Map(prev);
+              next.set(msg.fromUserId, (next.get(msg.fromUserId) || 0) + 1);
+              return next;
             });
+          }
+          return open;
+        });
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          isSubscribedRef.current = true;
+          if (!isTrackedRef.current) {
+            isTrackedRef.current = true;
+            try {
+              await channel.track({
+                userId: currentUser.id,
+                name: `${currentUser.firstName} ${currentUser.lastName}`,
+                role: currentUser.role,
+              });
+            } catch (err) {
+              console.warn('[chat] track failed', err);
+            }
+          }
         }
-      }
 
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        isSubscribedRef.current = false;
-        scheduleReconnect(attempt);
-      }
-    });
-  }
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          isSubscribedRef.current = false;
+          if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+          const delay = Math.min(1000 * Math.pow(2, attempt), 15_000);
+          reconnectTimeoutRef.current = setTimeout(() => {
+            const u = userRef.current;
+            if (u) subscribeChannel(u, attempt + 1);
+          }, delay);
+        }
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyPeerList, getFilteredPeers]);
 
   // ── Main effect: create channel when user is authenticated ──
   useEffect(() => {
