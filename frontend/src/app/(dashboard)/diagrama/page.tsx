@@ -155,6 +155,11 @@ export default function DiagramaEdificio() {
 
   // Expand/collapse
   const [expandedFloors, setExpandedFloors] = useState<Set<string>>(new Set());
+  const [initialized, setInitialized] = useState(false);
+
+  // Filter
+  type FilterCategory = RoomWithStatus['statusCategory'];
+  const [activeFilter, setActiveFilter] = useState<FilterCategory | null>(null);
 
   // Drag-and-drop: room reordering
   const [draggedRoom, setDraggedRoom] = useState<string | null>(null);
@@ -204,7 +209,32 @@ export default function DiagramaEdificio() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ── Build floor nodes ──
+  // ── Restore expanded floors from localStorage; default all expanded ──
+  useEffect(() => {
+    if (loading || initialized) return;
+    try {
+      const saved = localStorage.getItem('diagrama-expanded-floors');
+      if (saved) {
+        const floors = JSON.parse(saved) as string[];
+        setExpandedFloors(new Set(floors));
+      } else {
+        // Default: all floors expanded
+        const allFloors = [...new Set(rooms.map((r) => r.floor ?? 'Sem piso'))];
+        setExpandedFloors(new Set(allFloors));
+      }
+    } catch { /* ignore */ }
+    setInitialized(true);
+  }, [loading, initialized, rooms]);
+
+  // ── Persist expanded floors to localStorage ──
+  useEffect(() => {
+    if (!initialized) return;
+    try {
+      localStorage.setItem('diagrama-expanded-floors', JSON.stringify([...expandedFloors]));
+    } catch { /* ignore */ }
+  }, [expandedFloors, initialized]);
+
+  // ── Build floor nodes (with optional filtering) ──
   const floorNodes = useMemo((): FloorNode[] => {
     const roomsWithStatus: RoomWithStatus[] = rooms.map((room) => {
       const roomEquip = equipment.filter((e) => e.roomId === room.id);
@@ -253,9 +283,15 @@ export default function DiagramaEdificio() {
     });
 
     return sortedFloors.map((floor, idx) => {
-      const flRooms = floorMap.get(floor)!;
+      const allRooms = floorMap.get(floor)!;
+      // Apply filter: only show rooms matching activeFilter
+      const filteredRooms = activeFilter
+        ? allRooms.filter((r) => r.statusCategory === activeFilter)
+        : allRooms;
+
+      // Summary counts always reflect ALL rooms (not filtered)
       let okCount = 0, alertCount = 0, maintenanceCount = 0, criticalCount = 0, emptyCount = 0;
-      for (const r of flRooms) {
+      for (const r of allRooms) {
         switch (r.statusCategory) {
           case 'ok': okCount++; break;
           case 'alert': alertCount++; break;
@@ -267,12 +303,12 @@ export default function DiagramaEdificio() {
       return {
         floor,
         order: idx,
-        rooms: flRooms,
+        rooms: filteredRooms,
         expanded: expandedFloors.has(floor),
         okCount, alertCount, maintenanceCount, criticalCount, emptyCount,
       };
     });
-  }, [rooms, equipment, maintenance, assistanceRequests, expandedFloors]);
+  }, [rooms, equipment, maintenance, assistanceRequests, expandedFloors, activeFilter]);
 
   // ── Toggle floor expand/collapse ──
   const toggleFloor = useCallback((floor: string) => {
@@ -282,6 +318,14 @@ export default function DiagramaEdificio() {
       else next.add(floor);
       return next;
     });
+  }, []);
+
+  const expandAll = useCallback(() => {
+    setExpandedFloors(new Set(floorNodes.map((f) => f.floor)));
+  }, [floorNodes]);
+
+  const collapseAll = useCallback(() => {
+    setExpandedFloors(new Set());
   }, []);
 
   // ── Drag-and-drop room reorder (within same floor) ──
@@ -481,6 +525,10 @@ export default function DiagramaEdificio() {
   }
 
   const totalRooms = floorNodes.reduce((sum, f) => sum + f.rooms.length, 0);
+  const filteredCount = activeFilter
+    ? floorNodes.reduce((sum, f) => sum + f.rooms.length, 0)
+    : totalRooms;
+  const allFloorsEmpty = floorNodes.every((f) => f.rooms.length === 0) && activeFilter !== null;
 
   return (
     <div className="p-6 overflow-auto max-w-5xl mx-auto">
@@ -492,36 +540,85 @@ export default function DiagramaEdificio() {
         </p>
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-4 mb-6 p-3 bg-white rounded-lg border border-slate-200 text-sm">
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-green-500" />
-          <span className="text-slate-600">Tudo OK</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-yellow-500" />
-          <span className="text-slate-600">Alertas</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-orange-500 animate-pulse" />
-          <span className="text-slate-600">Manutenção</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-          <span className="text-slate-600">Crítico</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-gray-400" />
-          <span className="text-slate-600">Sem equipamentos</span>
-        </div>
+      {/* Legend / Filter tags */}
+      <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-white rounded-lg border border-slate-200 text-sm">
+        <span className="text-xs text-slate-400 font-medium mr-1">Filtrar:</span>
+        {(
+          [
+            { cat: 'ok' as const, label: 'Tudo OK', dot: 'bg-green-500' },
+            { cat: 'alert' as const, label: 'Alertas', dot: 'bg-yellow-500' },
+            { cat: 'maintenance' as const, label: 'Manutenção', dot: 'bg-orange-500' },
+            { cat: 'critical' as const, label: 'Crítico', dot: 'bg-red-500' },
+            { cat: 'empty' as const, label: 'Sem equipamentos', dot: 'bg-gray-400' },
+          ] as const
+        ).map(({ cat, label, dot }) => {
+          const isActive = activeFilter === cat;
+          return (
+            <button
+              key={cat}
+              onClick={() => setActiveFilter((prev) => (prev === cat ? null : cat))}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                isActive
+                  ? 'ring-2 ring-primary-400 ring-offset-1 bg-primary-50 text-primary-800 font-bold'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <span className={`w-2.5 h-2.5 rounded-full ${dot} ${
+                (cat === 'critical' || cat === 'maintenance') ? 'animate-pulse' : ''
+              }`} />
+              {label}
+            </button>
+          );
+        })}
+        {activeFilter && (
+          <button
+            onClick={() => setActiveFilter(null)}
+            className="ml-auto text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1 transition-colors"
+          >
+            ✕ Limpar
+          </button>
+        )}
       </div>
 
-      {/* Empty state */}
+      {/* Expand/Collapse all + result count */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={expandAll}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            <ChevronDown className="w-3.5 h-3.5" />
+            Expandir todos
+          </button>
+          <button
+            onClick={collapseAll}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+            Colapsar todos
+          </button>
+        </div>
+        {activeFilter && (
+          <span className="text-xs text-slate-500">
+            {filteredCount} resultado{filteredCount !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+
+      {/* Empty state — no rooms at all */}
       {totalRooms === 0 && (
         <div className="text-center py-16 text-slate-400">
           <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
           <p className="text-lg">Nenhuma sala registada</p>
           <p className="text-sm mt-1">Adicione salas para visualizar o diagrama do edifício.</p>
+        </div>
+      )}
+
+      {/* Filter empty state — rooms exist but none match filter */}
+      {allFloorsEmpty && (
+        <div className="text-center py-12 text-slate-400">
+          <p className="text-lg">Nenhum resultado para este filtro</p>
+          <p className="text-sm mt-1">Tente selecionar outro estado ou limpe o filtro.</p>
         </div>
       )}
 
@@ -622,11 +719,11 @@ export default function DiagramaEdificio() {
                         onDrop={(e) => { e.preventDefault(); handleDropRoom(refKey); }}
                         onDragEnd={handleDragEndRoom}
                         onContextMenu={(e) => handleContextMenu(e, rws.room)}
-                        className={`group relative flex items-center gap-3 rounded-lg border-2 p-3 cursor-pointer transition-all duration-150 ${getRoomCardBorder(cat)} ${
+                        className={`group relative flex items-center gap-3 rounded-lg border-2 p-3 cursor-pointer transition-all duration-200 ${getRoomCardBorder(cat)} ${
                           isDragged ? 'opacity-40 border-dashed border-slate-400' : ''
                         } ${isDragOver ? 'ring-2 ring-primary-400 ring-offset-1' : ''} ${
                           !isDragged ? 'hover:shadow-sm hover:border-slate-300' : ''
-                        }`}
+                        } animate-in fade-in`}
                         onMouseEnter={(e) => handleMouseEnter(refKey, e.currentTarget)}
                         onMouseLeave={handleMouseLeave}
                         onClick={() => handleRoomClick(refKey)}
