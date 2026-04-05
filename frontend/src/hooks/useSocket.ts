@@ -7,11 +7,16 @@ let socketInstance: Socket | null = null;
 let socketCleanup: (() => void) | null = null;
 let currentSocketUrl: string | null = null;
 
-// In dev, '/' proxies to backend via Next.js config. In production, use NEXT_PUBLIC_WS_URL.
 function getSocketUrl(): string {
   const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
   if (wsUrl) return wsUrl;
   return '/';
+}
+
+// On Vercel serverless, WebSocket transport always fails (no persistent connections).
+// Only use polling in production — it works with serverless.
+function isProduction(): boolean {
+  return typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 }
 
 export function useSocket() {
@@ -23,7 +28,6 @@ export function useSocket() {
 
     const url = getSocketUrl();
 
-    // Reconnect if backend URL changed (e.g. between dev and prod)
     if (socketInstance && currentSocketUrl !== url) {
       socketInstance.disconnect();
       socketInstance = null;
@@ -32,24 +36,25 @@ export function useSocket() {
     }
 
     if (!socketInstance) {
+      const transports: ('polling' | 'websocket')[] = isProduction() ? ['polling'] : ['polling', 'websocket'];
+
       socketInstance = io(url, {
         auth: { token: accessToken },
-        transports: ['polling', 'websocket'],
+        transports,
         reconnection: true,
         reconnectionAttempts: 3,
         reconnectionDelay: 2000,
         reconnectionDelayMax: 5000,
         timeout: 8000,
         forceNew: true,
+        upgrade: !isProduction(),
       });
 
-      // Suppress noisy console errors — HTTP presence is the primary mechanism now
-      socketInstance.on('connect_error', () => {
-        // Intentionally silent — HTTP presence handles online status
-      });
+      // Completely suppress Socket.io error logs — HTTP presence handles everything
+      socketInstance.io.engine.on('error', () => {});
+      socketInstance.on('connect_error', () => {});
 
       socketInstance.on('connect', () => {
-        // Re-emit presence on reconnect (supplementary to HTTP)
         socketInstance!.emit('presence:join', {
           userId: user.id,
           name: `${user.firstName} ${user.lastName}`,
@@ -72,7 +77,7 @@ export function useSocket() {
     currentSocketUrl = url;
 
     socketRef.current = socketInstance;
-    return () => { /* keep alive across re-renders; cleanup on unmount handled by disconnectSocket */ };
+    return () => {};
   }, [isAuthenticated, accessToken, user]);
 
   return socketRef.current;
