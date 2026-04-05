@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Monitor, LayoutDashboard, Package, Wrench, ArrowLeftRight, ClipboardList,
-  Building2, Users, DoorOpen, Tag, BarChart3, Bell, LogOut, Settings, FileText, Shield, Building, MessageCircle
+  Building2, Users, DoorOpen, Tag, BarChart3, Bell, LogOut, Settings, FileText, Shield, Building, MessageCircle, Database
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { authApi } from '@/lib/api';
@@ -32,6 +32,7 @@ const navItems = [
 const adminItems = [
   { href: '/users', icon: Users, label: 'Utilizadores' },
   { href: '/institutions', icon: Building2, label: 'Instituições' },
+  { href: '/ad-integration', icon: Database, label: 'Active Directory' },
   { href: '/audit', icon: Shield, label: 'Auditoria' },
   { href: '/settings', icon: Settings, label: 'Definições' },
 ];

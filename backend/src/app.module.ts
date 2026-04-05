@@ -21,6 +21,7 @@ import { AuditModule } from './audit/audit.module';
 import { SchedulesModule } from './schedules/schedules.module';
 import { FavoriteRoomsModule } from './favorite-rooms/favorite-rooms.module';
 import { AssistanceRequestsModule } from './assistance-requests/assistance-requests.module';
+import { AdIntegrationModule } from './ad-integration/ad-integration.module';
 import configuration from './config/configuration';
 
 @Module({
@@ -47,6 +48,7 @@ import configuration from './config/configuration';
     SchedulesModule,
     FavoriteRoomsModule,
     AssistanceRequestsModule,
+    AdIntegrationModule,
   ],
 })
 export class AppModule {}

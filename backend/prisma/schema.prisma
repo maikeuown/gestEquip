@@ -37,6 +37,7 @@ model Institution {
   rooms              Room[]
   schedules          Schedule[]
   users              User[]
+  adConfigs          SchoolAdConfig[]
 
   @@map("institutions")
 }
@@ -79,6 +80,12 @@ model User {
   requests                   Request[]           @relation("RequestCreator")
   schedules                  Schedule[]
   institution                Institution         @relation(fields: [institutionId], references: [id])
+
+  // Active Directory sync fields
+  adSid             String?   @unique @map("ad_sid")
+  adGuid            String?   @map("ad_guid")
+  adSource          String?   @map("ad_source")
+  adLastSyncAt      DateTime? @map("ad_last_sync_at")
 
   @@map("users")
 }
@@ -489,4 +496,66 @@ enum AssistanceProblem {
   AUDIO_PROBLEM
   DISPLAY_PROBLEM
   OTHER
+}
+
+// ── Active Directory integration models ──
+
+model SchoolAdConfig {
+  id                String   @id @default(uuid())
+  institutionId     String   @map("institution_id")
+
+  // Connection settings
+  enabled           Boolean  @default(false)
+  domainController  String   @map("domain_controller")   // e.g. dc.escola.local
+  port              Int      @default(636)               // LDAPS only
+  baseDn            String   @map("base_dn")             // e.g. DC=escola,DC=local
+  bindDn            String   @map("bind_dn")             // service account DN
+  bindPassword      String   @map("bind_password")       // encrypted at rest
+  useLdaps          Boolean  @default(true)              // mandatory LDAPS
+
+  // Teacher group filter
+  teacherGroupDns   Json     @default("[]") @map("teacher_group_dns") // ["CN=Professores,OU=Groups,..."]
+  userFilter        String?  @map("user_filter")         // additional LDAP filter
+
+  // Sync metadata
+  lastSyncAt        DateTime? @map("last_sync_at")
+  lastSyncStatus    String?   @map("last_sync_status")   // success, partial, failed
+  lastSyncUsersCount Int     @default(0) @map("last_sync_users_count")
+  lastSyncErrors    Json?     @default("[]") @map("last_sync_errors")
+
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  institution       Institution @relation(fields: [institutionId], references: [id])
+  syncLogs          AdSyncLog[]
+
+  @@unique([institutionId])
+  @@map("school_ad_configs")
+}
+
+model AdSyncLog {
+  id                String   @id @default(uuid())
+  configId          String   @map("config_id")
+
+  // Sync operation details
+  operation         String              // full, incremental, preview, test_connection
+  status            String              // success, partial, failed
+  startedAt         DateTime @map("started_at")
+  completedAt       DateTime? @map("completed_at")
+
+  // Results
+  usersFound        Int      @default(0) @map("users_found")
+  usersCreated      Int      @default(0) @map("users_created")
+  usersUpdated      Int      @default(0) @map("users_updated")
+  usersSkipped      Int      @default(0) @map("users_skipped")
+  usersFailed       Int      @default(0) @map("users_failed")
+  errors            Json?     @default("[]")
+
+  // Queue / retry info
+  queued            Boolean  @default(false)
+  retryCount        Int      @default(0) @map("retry_count")
+
+  config            SchoolAdConfig @relation(fields: [configId], references: [id])
+
+  @@map("ad_sync_logs")
 }
