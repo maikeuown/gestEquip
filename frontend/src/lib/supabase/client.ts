@@ -17,10 +17,18 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-// Single global channel for presence + broadcast chat
-export const chatChannel = supabase.channel('chat:global', {
-  config: {
-    presence: { key: 'chat' },
-    broadcast: { ack: true },
-  },
-});
+/**
+ * Create a fresh Supabase channel for the global chat.
+ * Called ONCE inside the hook — never at module level.
+ *
+ * NOTE: Each call returns a NEW channel instance.
+ * The caller MUST subscribe exactly once and clean up with removeChannel().
+ */
+export function createChatChannel() {
+  return supabase.channel('chat:global', {
+    config: {
+      presence: { key: 'chat' },
+      broadcast: { ack: true },
+    },
+  });
+}

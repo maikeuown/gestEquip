@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { RealtimeChannel } from '@supabase/supabase-js';
 import { useAuthStore } from '@/store/auth';
-import { supabase, chatChannel } from '@/lib/supabase/client';
+import { supabase, createChatChannel } from '@/lib/supabase/client';
 
 export interface ChatPeer {
   userId: string;
@@ -25,12 +26,6 @@ const ALLOWED_PEERS: Record<string, string[]> = {
   STAFF: ['TECHNICIAN'],
 };
 
-interface PresencePayload {
-  userId: string;
-  name: string;
-  role: string;
-}
-
 export function useChat() {
   const { user } = useAuthStore();
   const [onlinePeers, setOnlinePeers] = useState<ChatPeer[]>([]);
@@ -38,10 +33,14 @@ export function useChat() {
   const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
   const [openConversations, setOpenConversations] = useState<Set<string>>(new Set());
   const [peerDisconnected, setPeerDisconnected] = useState<Set<string>>(new Set());
-  const channelRef = useRef<typeof chatChannel | null>(null);
-  const joinedRef = useRef(false);
 
-  // Helper: read presence state and filter allowed peers
+  // ── Refs for channel lifecycle ──
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const isSubscribedRef = useRef(false);
+  const isTrackedRef = useRef(false);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Helper: read presence state and filter by role rules ──
   const getFilteredPeers = useCallback((): ChatPeer[] => {
     if (!user) return [];
     const allowedRoles = ALLOWED_PEERS[user.role];
@@ -76,33 +75,67 @@ export function useChat() {
     });
   }, []);
 
-  // Join Supabase channel + presence on mount
-  useEffect(() => {
-    if (!user || joinedRef.current) return;
-    joinedRef.current = true;
+  // ── Cleanup helper (called on unmount / user change) ──
+  const cleanupChannel = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    const ch = channelRef.current;
+    if (ch) {
+      try {
+        ch.untrack().catch(() => {});
+      } catch { /* already gone */ }
+      try {
+        supabase.removeChannel(ch);
+      } catch { /* already removed */ }
+    }
+    channelRef.current = null;
+    isSubscribedRef.current = false;
+    isTrackedRef.current = false;
+  }, []);
 
-    const channel = chatChannel;
+  // ── Schedule a reconnect (exponential backoff, capped at 15 s) ──
+  const scheduleReconnect = useCallback(
+    (attempt: number) => {
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      const delay = Math.min(1000 * Math.pow(2, attempt), 15000);
+      reconnectTimeoutRef.current = setTimeout(() => {
+        if (user && channelRef.current && !isSubscribedRef.current) {
+          subscribeChannel(user, attempt + 1);
+        }
+      }, delay);
+    },
+    [user],
+  );
+
+  // ── Core subscribe helper ──
+  function subscribeChannel(currentUser: typeof user, attempt = 0) {
+    if (!currentUser || isSubscribedRef.current) return;
+
+    const channel = createChatChannel();
     channelRef.current = channel;
 
-    // --- Presence sync (initial load) ---
+    // ── Presence events (supabase-js v2 uses 'system' for join/leave/sync) ──
     channel.on('system', { event: 'sync' }, () => {
       applyPeerList(getFilteredPeers());
     });
-
-    // --- Presence join ---
     channel.on('system', { event: 'join' }, () => {
       applyPeerList(getFilteredPeers());
     });
-
-    // --- Presence leave ---
     channel.on('system', { event: 'leave' }, () => {
       applyPeerList(getFilteredPeers());
     });
 
-    // --- Broadcast: receive chat message ---
+    // ── Broadcast: receive chat message ──
     channel.on('broadcast', { event: 'chat:message' }, (payload) => {
-      const msg = payload.payload as { fromUserId: string; fromName: string; content: string; timestamp: string };
-      if (!msg || !msg.fromUserId) return;
+      const msg = payload.payload as {
+        fromUserId: string;
+        fromName: string;
+        content: string;
+        timestamp: string;
+      };
+      if (!msg?.fromUserId) return;
 
       setConversations((prev) => {
         const next = new Map(prev);
@@ -111,7 +144,6 @@ export function useChat() {
         return next;
       });
 
-      // Increment unread if conversation not open
       setOpenConversations((open) => {
         if (!open.has(msg.fromUserId)) {
           setUnreadCounts((prev) => {
@@ -124,26 +156,52 @@ export function useChat() {
       });
     });
 
-    // Subscribe and track presence
+    // ── Subscribe ──
     channel.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
-        channel.track({
-          userId: user.id,
-          name: `${user.firstName} ${user.lastName}`,
-          role: user.role,
-        });
+        isSubscribedRef.current = true;
+
+        // Track presence exactly once
+        if (!isTrackedRef.current) {
+          isTrackedRef.current = true;
+          channel
+            .track({
+              userId: currentUser.id,
+              name: `${currentUser.firstName} ${currentUser.lastName}`,
+              role: currentUser.role,
+            })
+            .catch((err) => {
+              console.warn('[chat] track failed', err);
+            });
+        }
+      }
+
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        isSubscribedRef.current = false;
+        scheduleReconnect(attempt);
       }
     });
+  }
+
+  // ── Main effect: create channel when user is authenticated ──
+  useEffect(() => {
+    if (!user) {
+      // User logged out — clean up
+      cleanupChannel();
+      setOnlinePeers([]);
+      return;
+    }
+
+    subscribeChannel(user);
 
     return () => {
-      channel.untrack().catch(() => {});
-      channel.unsubscribe().catch(() => {});
-      channelRef.current = null;
-      joinedRef.current = false;
+      cleanupChannel();
     };
-  }, [user, getFilteredPeers, applyPeerList]);
+    // Only re-run when user identity changes (not on every render)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
-  // --- Send message ---
+  // ── Send message ──
   const sendMessage = useCallback(
     (toUserId: string, content: string) => {
       if (!user) return;
@@ -155,12 +213,10 @@ export function useChat() {
         timestamp: new Date().toISOString(),
       };
 
-      // Broadcast to channel (all peers receive, filter on their side)
-      chatChannel.send({
-        type: 'broadcast',
-        event: 'chat:message',
-        payload,
-      });
+      const ch = channelRef.current;
+      if (ch?.state === 'joined' || ch?.state === 'joining') {
+        ch.send({ type: 'broadcast', event: 'chat:message', payload });
+      }
 
       // Add to own conversation immediately
       setConversations((prev) => {
@@ -192,7 +248,9 @@ export function useChat() {
 
   const getTotalUnread = useCallback(() => {
     let total = 0;
-    unreadCounts.forEach((count) => { total += count; });
+    unreadCounts.forEach((count) => {
+      total += count;
+    });
     return total;
   }, [unreadCounts]);
 
