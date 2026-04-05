@@ -14,6 +14,11 @@ function getSocketUrl(): string {
   return '/';
 }
 
+// Check if we're in production (Vercel) — polling transport doesn't work on serverless
+function isProduction(): boolean {
+  return typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+}
+
 export function useSocket() {
   const { accessToken, isAuthenticated, user } = useAuthStore();
   const socketRef = useRef<Socket | null>(null);
@@ -32,12 +37,23 @@ export function useSocket() {
     }
 
     if (!socketInstance) {
+      const transports: ('polling' | 'websocket')[] = isProduction() ? ['websocket'] : ['polling', 'websocket'];
+
       socketInstance = io(url, {
         auth: { token: accessToken },
-        transports: ['polling', 'websocket'],
+        transports,
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 10000,
+        forceNew: true,
+      });
+
+      // Suppress noisy console errors for expected disconnects
+      socketInstance.on('connect_error', (err) => {
+        // Don't spam console — Vercel serverless polling returns 400 which is expected
+        if (isProduction() && err.message.includes('400')) return;
       });
 
       socketInstance.on('connect', () => {

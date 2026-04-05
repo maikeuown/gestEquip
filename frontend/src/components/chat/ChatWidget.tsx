@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { MessageCircle, X } from 'lucide-react';
 import clsx from 'clsx';
 import { useChat } from '@/hooks/useChat';
@@ -23,6 +23,13 @@ export default function ChatWidget() {
 
   const [isOpen, setIsOpen] = useState(false);
   const unread = getTotalUnread();
+
+  // Listen for sidebar chat toggle event
+  useEffect(() => {
+    const handler = () => setIsOpen((prev) => !prev);
+    window.addEventListener('chat:toggle', handler);
+    return () => window.removeEventListener('chat:toggle', handler);
+  }, []);
 
   const handleSelectPeer = useCallback(
     (userId: string) => {

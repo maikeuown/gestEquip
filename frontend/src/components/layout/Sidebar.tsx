@@ -3,11 +3,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Monitor, LayoutDashboard, Package, Wrench, ArrowLeftRight, ClipboardList,
-  Building2, Users, DoorOpen, Tag, BarChart3, Bell, LogOut, Settings, FileText, Shield, Building
+  Building2, Users, DoorOpen, Tag, BarChart3, Bell, LogOut, Settings, FileText, Shield, Building, MessageCircle
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { authApi } from '@/lib/api';
 import { disconnectSocket } from '@/hooks/useSocket';
+import { useChat } from '@/hooks/useChat';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
@@ -38,6 +39,7 @@ const adminItems = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { user, clearAuth } = useAuthStore();
+  const { getTotalUnread } = useChat();
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -49,6 +51,9 @@ export default function Sidebar() {
   };
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
+
+  const unreadChat = getTotalUnread();
+  const canChat = user && ['TECHNICIAN', 'TEACHER', 'STAFF'].includes(user.role);
 
   return (
     <aside className="w-64 min-h-screen bg-slate-900 flex flex-col">
@@ -71,6 +76,22 @@ export default function Sidebar() {
               <Icon /> <span>{label}</span>
             </Link>
           )
+        )}
+
+        {/* Chat indicator — inline badge in nav for chat-enabled roles */}
+        {canChat && (
+          <div
+            className="sidebar-item relative cursor-pointer"
+            onClick={() => window.dispatchEvent(new CustomEvent('chat:toggle'))}
+          >
+            <MessageCircle className="w-4 h-4" />
+            <span className="truncate">Chat</span>
+            {unreadChat > 0 && (
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 min-w-[20px] h-5 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {unreadChat > 9 ? '9+' : unreadChat}
+              </span>
+            )}
+          </div>
         )}
 
         {(user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') && (
