@@ -21,7 +21,7 @@ const navItems = [
   { href: '/movements', icon: ArrowLeftRight, label: 'Movimentos', roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
   { href: '/requests', icon: ClipboardList, label: 'Requisições', roles: ['SUPER_ADMIN', 'ADMIN', 'TEACHER', 'STAFF'] },
   { href: '/rooms', icon: DoorOpen, label: 'Salas', roles: ['SUPER_ADMIN', 'ADMIN', 'TECHNICIAN', 'TEACHER', 'STAFF'] },
-  { href: '/schedules', icon: Monitor, label: 'Horários', roles: ['SUPER_ADMIN', 'ADMIN', 'TEACHER'] },
+  { href: '/schedules', icon: Monitor, label: 'Horários', roles: ['SUPER_ADMIN', 'ADMIN', 'TECHNICIAN', 'TEACHER'] },
   { href: '/assistance-requests', icon: ClipboardList, label: 'Pedidos Assistência', roles: ['TEACHER', 'STAFF'] },
   { href: '/equipment-types', icon: Tag, label: 'Tipos', roles: ['SUPER_ADMIN', 'ADMIN', 'TECHNICIAN'] },
   { href: '/reports', icon: BarChart3, label: 'Relatórios', roles: ['SUPER_ADMIN', 'ADMIN', 'TECHNICIAN'] },

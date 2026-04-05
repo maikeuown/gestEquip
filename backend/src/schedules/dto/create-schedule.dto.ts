@@ -1,9 +1,19 @@
-import { IsString, IsOptional, IsEnum } from 'class-validator';
-import { DayOfWeek } from '@prisma/client';
+import { IsString, IsOptional, IsEnum, ValidateIf } from 'class-validator';
+import { DayOfWeek, ScheduleType } from '@prisma/client';
 
 export class CreateScheduleDto {
   @IsOptional() @IsString() institutionId?: string;
-  @IsString() roomId: string;
+
+  @IsEnum(ScheduleType) type: ScheduleType;
+
+  @ValidateIf((o) => o.type === ScheduleType.ROOM_SCHEDULE)
+  @IsString()
+  roomId?: string;
+
+  @ValidateIf((o) => o.type === ScheduleType.TEACHER_SCHEDULE)
+  @IsString()
+  userId?: string;
+
   @IsEnum(DayOfWeek) day: DayOfWeek;
   @IsString() startTime: string;
   @IsString() endTime: string;

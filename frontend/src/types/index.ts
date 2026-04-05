@@ -82,11 +82,14 @@ export interface DashboardStats {
 }
 
 export type DayOfWeek = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
+export type ScheduleType = 'ROOM_SCHEDULE' | 'TEACHER_SCHEDULE';
 export type AssistanceProblem = 'NOT_TURNING_ON' | 'NOT_WORKING' | 'CONNECTIVITY_ISSUE' | 'AUDIO_PROBLEM' | 'DISPLAY_PROBLEM' | 'OTHER';
 
 export interface Schedule {
   id: string;
-  roomId: string;
+  type: ScheduleType;
+  roomId?: string;
+  userId?: string;
   day: DayOfWeek;
   startTime: string;
   endTime: string;
@@ -95,6 +98,7 @@ export interface Schedule {
   institutionId: string;
   createdAt: string;
   room?: Room;
+  user?: { id: string; firstName: string; lastName: string; email: string; role: UserRole };
 }
 
 export interface FavoriteRoom {
