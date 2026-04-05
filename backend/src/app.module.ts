@@ -17,12 +17,10 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ReportsModule } from './reports/reports.module';
 import { MessagesModule } from './messages/messages.module';
 import { UploadModule } from './upload/upload.module';
-import { WebsocketModule } from './websocket/websocket.module';
 import { AuditModule } from './audit/audit.module';
 import { SchedulesModule } from './schedules/schedules.module';
 import { FavoriteRoomsModule } from './favorite-rooms/favorite-rooms.module';
 import { AssistanceRequestsModule } from './assistance-requests/assistance-requests.module';
-import { PresenceModule } from './presence/presence.module';
 import configuration from './config/configuration';
 
 @Module({
@@ -45,12 +43,10 @@ import configuration from './config/configuration';
     ReportsModule,
     MessagesModule,
     UploadModule,
-    WebsocketModule,
     AuditModule,
     SchedulesModule,
     FavoriteRoomsModule,
     AssistanceRequestsModule,
-    PresenceModule,
   ],
 })
 export class AppModule {}

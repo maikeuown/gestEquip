@@ -1,8 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuthStore } from '@/store/auth';
-import { useSocket } from './useSocket';
-import api from '@/lib/api/client';
+import { supabase, chatChannel } from '@/lib/supabase/client';
 
 export interface ChatPeer {
   userId: string;
@@ -19,135 +18,92 @@ export interface ChatMessage {
   isOwn?: boolean;
 }
 
+// Role pairing: who can see whom
+const ALLOWED_PEERS: Record<string, string[]> = {
+  TECHNICIAN: ['TEACHER', 'STAFF'],
+  TEACHER: ['TECHNICIAN'],
+  STAFF: ['TECHNICIAN'],
+};
+
+interface PresencePayload {
+  userId: string;
+  name: string;
+  role: string;
+}
+
 export function useChat() {
-  const { user, accessToken } = useAuthStore();
-  const socket = useSocket();
+  const { user } = useAuthStore();
   const [onlinePeers, setOnlinePeers] = useState<ChatPeer[]>([]);
   const [conversations, setConversations] = useState<Map<string, ChatMessage[]>>(new Map());
   const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
   const [openConversations, setOpenConversations] = useState<Set<string>>(new Set());
   const [peerDisconnected, setPeerDisconnected] = useState<Set<string>>(new Set());
+  const channelRef = useRef<typeof chatChannel | null>(null);
+  const joinedRef = useRef(false);
 
-  // ============================================================
-  // HTTP PRESENCE (primary — works on Vercel serverless)
-  // ============================================================
+  // Helper: read presence state and filter allowed peers
+  const getFilteredPeers = useCallback((): ChatPeer[] => {
+    if (!user) return [];
+    const allowedRoles = ALLOWED_PEERS[user.role];
+    if (!allowedRoles) return [];
 
-  // Heartbeat every 10s to keep user marked online in DB
-  useEffect(() => {
-    if (!user || !accessToken) return;
+    const state = channelRef.current?.presenceState();
+    const seen = new Set<string>();
+    const peers: ChatPeer[] = [];
 
-    // Initial heartbeat immediately
-    api.post('/presence/heartbeat').catch(() => {});
-
-    // Repeat every 10 seconds
-    const heartbeatInterval = setInterval(() => {
-      api.post('/presence/heartbeat').catch(() => {});
-    }, 10000);
-
-    return () => clearInterval(heartbeatInterval);
-  }, [user, accessToken]);
-
-  // Poll online peers every 3 seconds
-  useEffect(() => {
-    if (!user || !accessToken) return;
-
-    let cancelled = false;
-
-    const pollPeers = async () => {
-      try {
-        const peers: ChatPeer[] = await api.get('/presence/online');
-        if (cancelled) return;
-        const arr = Array.isArray(peers) ? peers : [];
-        setOnlinePeers(arr);
-        // Clear "disconnected" flag for peers that just came back
-        setPeerDisconnected((prev) => {
-          const next = new Set(prev);
-          for (const p of arr) next.delete(p.userId);
-          return next;
-        });
-      } catch {
-        // Silently fail — next poll will retry
+    if (state) {
+      for (const presenceList of Object.values(state)) {
+        for (const presence of presenceList) {
+          const p = (presence as any)?.payload ?? presence;
+          if (!p?.userId || p.userId === user.id) continue;
+          if (seen.has(p.userId)) continue;
+          if (allowedRoles.includes(p.role)) {
+            seen.add(p.userId);
+            peers.push({ userId: p.userId, name: p.name, role: p.role, socketId: '' });
+          }
+        }
       }
-    };
-
-    pollPeers();
-    const interval = setInterval(pollPeers, 3000);
-
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [user, accessToken]);
-
-  // ============================================================
-  // WEBSOCKET PRESENCE (supplementary — local dev only)
-  // ============================================================
-
-  useEffect(() => {
-    if (!socket || !user) return;
-
-    const tryJoin = () => {
-      if (socket.connected) {
-        socket.emit('presence:join', {
-          userId: user.id,
-          name: `${user.firstName} ${user.lastName}`,
-          role: user.role,
-        });
-      }
-    };
-
-    if (socket.connected) {
-      tryJoin();
-    } else {
-      socket.once('connect', tryJoin);
     }
+    return peers;
+  }, [user]);
 
-    const onWsConnect = () => { tryJoin(); };
+  const applyPeerList = useCallback((peers: ChatPeer[]) => {
+    setOnlinePeers(peers);
+    setPeerDisconnected((prev) => {
+      const next = new Set(prev);
+      for (const p of peers) next.delete(p.userId);
+      return next;
+    });
+  }, []);
 
-    const onWsPresenceList = (peers: ChatPeer[]) => {
-      setOnlinePeers(peers);
-      setPeerDisconnected((prev) => {
-        const next = new Set(prev);
-        for (const p of peers) next.delete(p.userId);
-        return next;
-      });
-    };
-
-    const onWsPresenceJoined = (peer: { userId: string; name: string; role: string }) => {
-      setOnlinePeers((prev) => {
-        if (prev.find((p) => p.userId === peer.userId)) return prev;
-        return [...prev, { ...peer, socketId: '' }];
-      });
-      setPeerDisconnected((prev) => {
-        const next = new Set(prev);
-        next.delete(peer.userId);
-        return next;
-      });
-    };
-
-    const onWsPresenceLeft = (data: { userId: string }) => {
-      setOnlinePeers((prev) => prev.filter((p) => p.userId !== data.userId));
-      setPeerDisconnected((prev) => new Set(prev).add(data.userId));
-    };
-
-    socket.on('connect', onWsConnect);
-    socket.on('presence:list', onWsPresenceList);
-    socket.on('presence:joined', onWsPresenceJoined);
-    socket.on('presence:left', onWsPresenceLeft);
-
-    return () => {
-      socket.off('connect', onWsConnect);
-      socket.off('presence:list', onWsPresenceList);
-      socket.off('presence:joined', onWsPresenceJoined);
-      socket.off('presence:left', onWsPresenceLeft);
-    };
-  }, [socket, user]);
-
-  // ============================================================
-  // MESSAGES (WebSocket — supplementary)
-  // ============================================================
-
+  // Join Supabase channel + presence on mount
   useEffect(() => {
-    if (!socket || !user) return;
+    if (!user || joinedRef.current) return;
+    joinedRef.current = true;
 
-    const onMessageReceive = (msg: { fromUserId: string; fromName: string; content: string; timestamp: string }) => {
+    const channel = chatChannel;
+    channelRef.current = channel;
+
+    // --- Presence sync (initial load) ---
+    channel.on('system', { event: 'sync' }, () => {
+      applyPeerList(getFilteredPeers());
+    });
+
+    // --- Presence join ---
+    channel.on('system', { event: 'join' }, () => {
+      applyPeerList(getFilteredPeers());
+    });
+
+    // --- Presence leave ---
+    channel.on('system', { event: 'leave' }, () => {
+      applyPeerList(getFilteredPeers());
+    });
+
+    // --- Broadcast: receive chat message ---
+    channel.on('broadcast', { event: 'chat:message' }, (payload) => {
+      const msg = payload.payload as { fromUserId: string; fromName: string; content: string; timestamp: string };
+      if (!msg || !msg.fromUserId) return;
+
       setConversations((prev) => {
         const next = new Map(prev);
         const existing = next.get(msg.fromUserId) || [];
@@ -155,6 +111,7 @@ export function useChat() {
         return next;
       });
 
+      // Increment unread if conversation not open
       setOpenConversations((open) => {
         if (!open.has(msg.fromUserId)) {
           setUnreadCounts((prev) => {
@@ -165,38 +122,55 @@ export function useChat() {
         }
         return open;
       });
+    });
+
+    // Subscribe and track presence
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        channel.track({
+          userId: user.id,
+          name: `${user.firstName} ${user.lastName}`,
+          role: user.role,
+        });
+      }
+    });
+
+    return () => {
+      channel.untrack().catch(() => {});
+      channel.unsubscribe().catch(() => {});
+      channelRef.current = null;
+      joinedRef.current = false;
     };
+  }, [user, getFilteredPeers, applyPeerList]);
 
-    socket.on('message:receive', onMessageReceive);
-    return () => { socket.off('message:receive', onMessageReceive); };
-  }, [socket, user]);
-
-  // ============================================================
-  // ACTIONS
-  // ============================================================
-
+  // --- Send message ---
   const sendMessage = useCallback(
     (toUserId: string, content: string) => {
-      if (!socket || !user) return;
-      socket.emit('message:send', { toUserId, content });
+      if (!user) return;
 
+      const payload = {
+        fromUserId: user.id,
+        fromName: `${user.firstName} ${user.lastName}`,
+        content,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Broadcast to channel (all peers receive, filter on their side)
+      chatChannel.send({
+        type: 'broadcast',
+        event: 'chat:message',
+        payload,
+      });
+
+      // Add to own conversation immediately
       setConversations((prev) => {
         const next = new Map(prev);
         const existing = next.get(toUserId) || [];
-        next.set(toUserId, [
-          ...existing,
-          {
-            fromUserId: user.id,
-            fromName: `${user.firstName} ${user.lastName}`,
-            content,
-            timestamp: new Date().toISOString(),
-            isOwn: true,
-          },
-        ]);
+        next.set(toUserId, [...existing, { ...payload, isOwn: true }]);
         return next;
       });
     },
-    [socket, user],
+    [user],
   );
 
   const openConversation = useCallback((userId: string) => {
