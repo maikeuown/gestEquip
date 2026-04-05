@@ -116,14 +116,14 @@ export function useChat() {
     const channel = createChatChannel();
     channelRef.current = channel;
 
-    // ── Presence events (supabase-js v2 uses 'system' for join/leave/sync) ──
-    channel.on('system', { event: 'sync' }, () => {
+    // ── Presence events (supabase-js v2 uses 'presence' type for join/leave/sync) ──
+    channel.on('presence', { event: 'sync' }, () => {
       applyPeerList(getFilteredPeers());
     });
-    channel.on('system', { event: 'join' }, () => {
+    channel.on('presence', { event: 'join' }, () => {
       applyPeerList(getFilteredPeers());
     });
-    channel.on('system', { event: 'leave' }, () => {
+    channel.on('presence', { event: 'leave' }, () => {
       applyPeerList(getFilteredPeers());
     });
 
