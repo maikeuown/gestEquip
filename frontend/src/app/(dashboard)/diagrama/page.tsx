@@ -205,12 +205,35 @@ export default function DiagramaEdificio() {
     setTooltipLocked(false);
   }, []);
 
+  const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const hideTooltip = useCallback(() => {
+    if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+    hideTimeoutRef.current = setTimeout(() => {
+      hoveredRef.current = null;
+      setHoveredRoom((prev) => {
+        if (tooltipLocked) return prev;
+        return null;
+      });
+    }, 150);
+  }, [tooltipLocked]);
+
   const handleMouseLeave = useCallback(() => {
     hoveredRef.current = null;
-    if (!tooltipLocked) {
-      setHoveredRoom(null);
+    hideTooltip();
+  }, [hideTooltip]);
+
+  // Keep tooltip visible when hovering over it
+  const handleTooltipEnter = useCallback(() => {
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
     }
-  }, [tooltipLocked]);
+  }, []);
+
+  const handleTooltipLeave = useCallback(() => {
+    hideTooltip();
+  }, [hideTooltip]);
 
   const handleRoomClick = useCallback((roomId: string) => {
     router.push(`/rooms?search=${roomId}`);
@@ -373,6 +396,8 @@ export default function DiagramaEdificio() {
           targetRef={{ current: roomRefs.current.get(hoveredRoom) ?? null } as React.RefObject<HTMLElement>}
           visible={!!hoveredRoom}
           interactive
+          onTooltipEnter={handleTooltipEnter}
+          onTooltipLeave={handleTooltipLeave}
         >
           <div onClick={handleTooltipClick}>
             {(() => {

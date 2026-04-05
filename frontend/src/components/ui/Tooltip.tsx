@@ -7,9 +7,11 @@ interface TooltipProps {
   children: React.ReactNode;
   visible: boolean;
   interactive?: boolean;
+  onTooltipEnter?: () => void;
+  onTooltipLeave?: () => void;
 }
 
-export default function Tooltip({ targetRef, children, visible, interactive = false }: TooltipProps) {
+export default function Tooltip({ targetRef, children, visible, interactive = false, onTooltipEnter, onTooltipLeave }: TooltipProps) {
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -61,6 +63,8 @@ export default function Tooltip({ targetRef, children, visible, interactive = fa
       }`}
       style={{ top: position.top, left: position.left }}
       onClick={(e) => e.stopPropagation()}
+      onMouseEnter={onTooltipEnter}
+      onMouseLeave={onTooltipLeave}
     >
       {children}
     </div>,
