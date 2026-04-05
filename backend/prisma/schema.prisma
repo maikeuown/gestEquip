@@ -54,6 +54,7 @@ model User {
   roleConfirmed              Boolean             @default(false) @map("role_confirmed")
   isActive                   Boolean             @default(true) @map("is_active")
   lastLoginAt                DateTime?           @map("last_login_at")
+  lastSeenAt                 DateTime?           @map("last_seen_at")
   emailVerifiedAt            DateTime?           @map("email_verified_at")
   settings                   Json?               @default("{}")
   createdAt                  DateTime            @default(now()) @map("created_at")

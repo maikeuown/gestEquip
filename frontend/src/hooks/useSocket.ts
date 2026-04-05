@@ -14,11 +14,6 @@ function getSocketUrl(): string {
   return '/';
 }
 
-// Check if we're in production (Vercel) — polling transport doesn't work on serverless
-function isProduction(): boolean {
-  return typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-}
-
 export function useSocket() {
   const { accessToken, isAuthenticated, user } = useAuthStore();
   const socketRef = useRef<Socket | null>(null);
@@ -37,27 +32,24 @@ export function useSocket() {
     }
 
     if (!socketInstance) {
-      const transports: ('polling' | 'websocket')[] = isProduction() ? ['websocket'] : ['polling', 'websocket'];
-
       socketInstance = io(url, {
         auth: { token: accessToken },
-        transports,
+        transports: ['polling', 'websocket'],
         reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
+        reconnectionAttempts: 3,
+        reconnectionDelay: 2000,
         reconnectionDelayMax: 5000,
-        timeout: 10000,
+        timeout: 8000,
         forceNew: true,
       });
 
-      // Suppress noisy console errors for expected disconnects
-      socketInstance.on('connect_error', (err) => {
-        // Don't spam console — Vercel serverless polling returns 400 which is expected
-        if (isProduction() && err.message.includes('400')) return;
+      // Suppress noisy console errors — HTTP presence is the primary mechanism now
+      socketInstance.on('connect_error', () => {
+        // Intentionally silent — HTTP presence handles online status
       });
 
       socketInstance.on('connect', () => {
-        // Re-emit presence on reconnect
+        // Re-emit presence on reconnect (supplementary to HTTP)
         socketInstance!.emit('presence:join', {
           userId: user.id,
           name: `${user.firstName} ${user.lastName}`,
@@ -73,7 +65,6 @@ export function useSocket() {
         currentSocketUrl = null;
       };
     } else if (!socketInstance.connected) {
-      // Update auth token on existing instance
       socketInstance.auth = { token: accessToken };
       socketInstance.connect();
     }

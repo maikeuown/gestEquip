@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuthStore } from '@/store/auth';
-import { useSocket } from './useSocket';
+import { useSocket, getSocket } from './useSocket';
+import api from '@/lib/api/client';
 
 export interface ChatPeer {
   userId: string;
@@ -18,29 +19,76 @@ export interface ChatMessage {
   isOwn?: boolean;
 }
 
+// Check if WebSocket is actually connected and working
+function isWsConnected(): boolean {
+  const s = getSocket();
+  return !!s && s.connected;
+}
+
 export function useChat() {
-  const { user } = useAuthStore();
+  const { user, accessToken } = useAuthStore();
   const socket = useSocket();
   const [onlinePeers, setOnlinePeers] = useState<ChatPeer[]>([]);
   const [conversations, setConversations] = useState<Map<string, ChatMessage[]>>(new Map());
   const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
   const [openConversations, setOpenConversations] = useState<Set<string>>(new Set());
   const [peerDisconnected, setPeerDisconnected] = useState<Set<string>>(new Set());
-  const initializedRef = useRef(false);
+  const [useHttpPresence, setUseHttpPresence] = useState(false);
+  const httpPresenceRef = useRef<{ polling: boolean; heartbeat: boolean }>({ polling: false, heartbeat: false });
 
-  // Join presence on mount — but ONLY after socket confirms it is connected
+  // HTTP-based presence: heartbeat + polling (fallback for serverless)
+  useEffect(() => {
+    if (!user || !accessToken) return;
+
+    // Send heartbeat every 10s
+    const heartbeatInterval = setInterval(() => {
+      api.post('/presence/heartbeat').catch(() => {});
+    }, 10000);
+
+    // Initial heartbeat
+    api.post('/presence/heartbeat').catch(() => {});
+
+    return () => clearInterval(heartbeatInterval);
+  }, [user, accessToken]);
+
+  // HTTP presence polling (always active as primary or fallback)
+  useEffect(() => {
+    if (!user || !accessToken) return;
+
+    const pollPeers = async () => {
+      try {
+        const data = await api.get('/presence/online');
+        const peers: ChatPeer[] = Array.isArray(data) ? data : [];
+        setOnlinePeers(peers);
+        setPeerDisconnected((prev) => {
+          const next = new Set(prev);
+          for (const p of peers) next.delete(p.userId);
+          return next;
+        });
+      } catch {
+        // Silently fail — will retry
+      }
+    };
+
+    // Poll every 3 seconds
+    pollPeers();
+    const interval = setInterval(pollPeers, 3000);
+
+    return () => clearInterval(interval);
+  }, [user, accessToken]);
+
+  // WebSocket presence (only when socket is connected — local dev)
   useEffect(() => {
     if (!socket || !user) return;
 
     const tryJoin = () => {
-      if (initializedRef.current) return;
-      initializedRef.current = true;
-
-      socket.emit('presence:join', {
-        userId: user.id,
-        name: `${user.firstName} ${user.lastName}`,
-        role: user.role,
-      });
+      if (socket.connected) {
+        socket.emit('presence:join', {
+          userId: user.id,
+          name: `${user.firstName} ${user.lastName}`,
+          role: user.role,
+        });
+      }
     };
 
     if (socket.connected) {
@@ -49,19 +97,22 @@ export function useChat() {
       socket.once('connect', tryJoin);
     }
 
-    // Listen for peer list
-    socket.on('presence:list', (peers: ChatPeer[]) => {
+    // If WebSocket connects successfully, use it for presence
+    const onWsConnect = () => {
+      setUseHttpPresence(false);
+      tryJoin();
+    };
+
+    const onWsPresenceList = (peers: ChatPeer[]) => {
       setOnlinePeers(peers);
-      // Clear disconnected status for peers that are back online
       setPeerDisconnected((prev) => {
         const next = new Set(prev);
         for (const p of peers) next.delete(p.userId);
         return next;
       });
-    });
+    };
 
-    // Listen for new peer joining
-    socket.on('presence:joined', (peer: { userId: string; name: string; role: string }) => {
+    const onWsPresenceJoined = (peer: { userId: string; name: string; role: string }) => {
       setOnlinePeers((prev) => {
         if (prev.find((p) => p.userId === peer.userId)) return prev;
         return [...prev, { ...peer, socketId: '' }];
@@ -71,26 +122,39 @@ export function useChat() {
         next.delete(peer.userId);
         return next;
       });
-    });
+    };
 
-    // Listen for peer leaving
-    socket.on('presence:left', (data: { userId: string }) => {
+    const onWsPresenceLeft = (data: { userId: string }) => {
       setOnlinePeers((prev) => prev.filter((p) => p.userId !== data.userId));
       setPeerDisconnected((prev) => new Set(prev).add(data.userId));
-    });
+    };
 
-    // Receive message
-    socket.on('message:receive', (msg: { fromUserId: string; fromName: string; content: string; timestamp: string }) => {
-      const isOwn = msg.fromUserId === user?.id;
+    socket.on('connect', onWsConnect);
+    socket.on('presence:list', onWsPresenceList);
+    socket.on('presence:joined', onWsPresenceJoined);
+    socket.on('presence:left', onWsPresenceLeft);
+
+    return () => {
+      socket.off('connect', onWsConnect);
+      socket.off('presence:list', onWsPresenceList);
+      socket.off('presence:joined', onWsPresenceJoined);
+      socket.off('presence:left', onWsPresenceLeft);
+      socket.off('connect', tryJoin);
+    };
+  }, [socket, user]);
+
+  // Receive messages (WebSocket — only works when connected)
+  useEffect(() => {
+    if (!socket || !user) return;
+
+    const onMessageReceive = (msg: { fromUserId: string; fromName: string; content: string; timestamp: string }) => {
       setConversations((prev) => {
         const next = new Map(prev);
-        const peerId = isOwn ? msg.fromUserId : msg.fromUserId;
-        const existing = next.get(peerId) || [];
-        next.set(peerId, [...existing, { ...msg, isOwn: false }]);
+        const existing = next.get(msg.fromUserId) || [];
+        next.set(msg.fromUserId, [...existing, { ...msg, isOwn: false }]);
         return next;
       });
 
-      // Increment unread if conversation not open
       setOpenConversations((open) => {
         if (!open.has(msg.fromUserId)) {
           setUnreadCounts((prev) => {
@@ -101,15 +165,10 @@ export function useChat() {
         }
         return open;
       });
-    });
-
-    return () => {
-      socket.off('connect', tryJoin);
-      socket.off('presence:list');
-      socket.off('presence:joined');
-      socket.off('presence:left');
-      socket.off('message:receive');
     };
+
+    socket.on('message:receive', onMessageReceive);
+    return () => { socket.off('message:receive', onMessageReceive); };
   }, [socket, user]);
 
   const sendMessage = useCallback(
