@@ -1,9 +1,10 @@
 'use client';
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { roomsApi, equipmentApi, maintenanceApi, assistanceRequestsApi } from '@/lib/api';
 import Tooltip from '@/components/ui/Tooltip';
-import { Wrench, AlertTriangle, Monitor, CheckCircle, XCircle } from 'lucide-react';
+import { Wrench, AlertTriangle, Monitor, CheckCircle, XCircle, ExternalLink } from 'lucide-react';
 
 interface Room {
   id: string;
@@ -88,12 +89,14 @@ function getRoomStatusDot(room: RoomWithStatus): string {
 
 export default function DiagramaEdificio() {
   const { user } = useAuthStore();
+  const router = useRouter();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [maintenance, setMaintenance] = useState<MaintenanceTicket[]>([]);
   const [assistanceRequests, setAssistanceRequests] = useState<AssistanceRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [hoveredRoom, setHoveredRoom] = useState<string | null>(null);
+  const [tooltipLocked, setTooltipLocked] = useState(false);
   const roomRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const hoveredRef = useRef<HTMLDivElement | null>(null);
 
@@ -190,7 +193,6 @@ export default function DiagramaEdificio() {
     floorMap.get(floor)!.push(rws);
   }
 
-  // Sort floors: highest first (3, 2, 1, 0, -1, -2), then alphabetically for non-numeric
   const sortedFloors = [...floorMap.keys()].sort((a, b) => {
     const aNum = FLOOR_ORDER[a] ?? 99;
     const bNum = FLOOR_ORDER[b] ?? 99;
@@ -200,11 +202,50 @@ export default function DiagramaEdificio() {
   const handleMouseEnter = useCallback((roomId: string, el: HTMLDivElement) => {
     hoveredRef.current = el;
     setHoveredRoom(roomId);
+    setTooltipLocked(false);
   }, []);
 
   const handleMouseLeave = useCallback(() => {
     hoveredRef.current = null;
-    setHoveredRoom(null);
+    if (!tooltipLocked) {
+      setHoveredRoom(null);
+    }
+  }, [tooltipLocked]);
+
+  const handleRoomClick = useCallback((roomId: string) => {
+    router.push(`/rooms?search=${roomId}`);
+  }, [router]);
+
+  const handleEquipmentClick = useCallback((eqId: string) => {
+    router.push(`/equipment?search=${eqId}`);
+  }, [router]);
+
+  const handleMaintenanceClick = useCallback((ticketId: string) => {
+    router.push(`/maintenance?search=${ticketId}`);
+  }, [router]);
+
+  const handleRequestClick = useCallback((reqId: string) => {
+    router.push(`/assistance-requests?search=${reqId}`);
+  }, [router]);
+
+  // Click on tooltip to lock it open; click outside to dismiss
+  const handleTooltipClick = useCallback((e: React.MouseEvent) => {
+    // If clicking a link/button inside tooltip, don't lock
+    const target = e.target as HTMLElement;
+    if (target.closest('a, button')) return;
+    setTooltipLocked((prev) => !prev);
+  }, []);
+
+  // Dismiss locked tooltip on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setTooltipLocked(false);
+        setHoveredRoom(null);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, []);
 
   if (loading) {
@@ -231,7 +272,7 @@ export default function DiagramaEdificio() {
     <div className="p-6 overflow-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Diagrama do Edifício</h1>
-        <p className="text-slate-500 mt-1">Vista geral do estado das salas e equipamentos por piso</p>
+        <p className="text-slate-500 mt-1">Vista geral do estado das salas e equipamentos por piso. Clique numa sala para ver detalhes.</p>
       </div>
 
       {/* Legend */}
@@ -287,9 +328,10 @@ export default function DiagramaEdificio() {
                       ref={(el) => {
                         if (el) roomRefs.current.set(refKey, el);
                       }}
-                      className={`relative border-2 rounded-lg p-3 min-w-[160px] max-w-[220px] cursor-default transition-all hover:shadow-md ${rws.statusColor}`}
+                      className={`relative border-2 rounded-lg p-3 min-w-[160px] max-w-[220px] cursor-pointer transition-all hover:shadow-md hover:scale-[1.02] group ${rws.statusColor}`}
                       onMouseEnter={(e) => handleMouseEnter(refKey, e.currentTarget)}
                       onMouseLeave={handleMouseLeave}
+                      onClick={() => handleRoomClick(refKey)}
                     >
                       <div className="flex items-start gap-2">
                         <span className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${getRoomStatusDot(rws)}`} />
@@ -312,6 +354,10 @@ export default function DiagramaEdificio() {
                           </span>
                         </div>
                       )}
+                      {/* Click indicator */}
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                      </div>
                     </div>
                   );
                 })}
@@ -321,99 +367,125 @@ export default function DiagramaEdificio() {
         })}
       </div>
 
-      {/* Tooltip */}
+      {/* Interactive Tooltip */}
       {hoveredRoom && (
         <Tooltip
           targetRef={{ current: roomRefs.current.get(hoveredRoom) ?? null } as React.RefObject<HTMLElement>}
           visible={!!hoveredRoom}
+          interactive
         >
-          {(() => {
-            const rws = roomsWithStatus.find((r) => r.room.id === hoveredRoom);
-            if (!rws) return null;
-            return (
-              <div className="space-y-2">
-                <div className="font-semibold text-base border-b border-slate-600 pb-1">
-                  {rws.room.name}
-                  {rws.room.code && <span className="text-slate-400 font-normal ml-2 text-sm">({rws.room.code})</span>}
-                  {rws.room.building && <span className="text-slate-400 font-normal ml-2 text-sm">{rws.room.building}</span>}
-                </div>
-
-                {rws.equipmentCount === 0 ? (
-                  <div className="text-slate-400 text-sm flex items-center gap-1.5">
-                    <XCircle className="w-3.5 h-3.5" />
-                    Sem equipamentos atribuídos
-                  </div>
-                ) : (
-                  <div>
-                    <div className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-1">Equipamentos</div>
-                    <div className="space-y-1">
-                      {rws.roomEquipment.map((eq) => (
-                        <div key={eq.id} className="flex items-center gap-2 text-xs">
-                          <Monitor className="w-3 h-3 text-slate-400 flex-shrink-0" />
-                          <span className="truncate">{eq.name}</span>
-                          <span className={`ml-auto flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                            eq.status === 'ACTIVE' ? 'bg-green-900/40 text-green-300' :
-                            eq.status === 'MAINTENANCE' ? 'bg-yellow-900/40 text-yellow-300' :
-                            eq.status === 'INACTIVE' ? 'bg-gray-900/40 text-gray-300' :
-                            'bg-red-900/40 text-red-300'
-                          }`}>
-                            {eq.status === 'ACTIVE' ? 'Ativo' :
-                             eq.status === 'MAINTENANCE' ? 'Manutenção' :
-                             eq.status === 'INACTIVE' ? 'Inativo' :
-                             eq.status === 'RETIRED' ? 'Reformado' :
-                             eq.status === 'LOST' ? 'Perdido' : 'Roubado'}
-                          </span>
-                        </div>
-                      ))}
+          <div onClick={handleTooltipClick}>
+            {(() => {
+              const rws = roomsWithStatus.find((r) => r.room.id === hoveredRoom);
+              if (!rws) return null;
+              return (
+                <div className="space-y-2">
+                  {/* Header */}
+                  <div className="flex items-center justify-between border-b border-slate-600 pb-1">
+                    <div className="font-semibold text-base">
+                      {rws.room.name}
+                      {rws.room.code && <span className="text-slate-400 font-normal ml-2 text-sm">({rws.room.code})</span>}
+                      {rws.room.building && <span className="text-slate-400 font-normal ml-2 text-sm">{rws.room.building}</span>}
                     </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 ml-2" />
                   </div>
-                )}
 
-                {rws.openTickets === 0 && rws.openRequestCount === 0 ? (
-                  <div className="text-slate-400 text-sm flex items-center gap-1.5">
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    Sem ocorrências abertas
-                  </div>
-                ) : (
-                  <div>
-                    <div className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-1">Ocorrências Abertas</div>
-                    <div className="space-y-1">
-                      {maintenance
-                        .filter((m) => rws.roomEquipment.some((e) => e.id === m.equipmentId) && OPEN_MAINTENANCE_STATUSES.includes(m.status))
-                        .map((m) => (
-                          <div key={m.id} className="flex items-center gap-2 text-xs">
-                            {CRITICAL_PRIORITIES.includes(m.priority)
-                              ? <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
-                              : <Wrench className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                            }
-                            <span className="truncate">{m.title}</span>
+                  {/* Equipment list */}
+                  {rws.equipmentCount === 0 ? (
+                    <div className="text-slate-400 text-sm flex items-center gap-1.5">
+                      <XCircle className="w-3.5 h-3.5" />
+                      Sem equipamentos atribuídos
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-1">Equipamentos</div>
+                      <div className="space-y-0.5">
+                        {rws.roomEquipment.map((eq) => (
+                          <button
+                            key={eq.id}
+                            onClick={(e) => { e.stopPropagation(); handleEquipmentClick(eq.id); }}
+                            className="w-full flex items-center gap-2 text-xs hover:bg-slate-700 rounded px-1.5 py-0.5 -mx-1.5 transition-colors group/eq"
+                          >
+                            <Monitor className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                            <span className="truncate group-hover/eq:underline">{eq.name}</span>
                             <span className={`ml-auto flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                              m.status === 'OPEN' ? 'bg-blue-900/40 text-blue-300' :
-                              m.status === 'IN_PROGRESS' ? 'bg-yellow-900/40 text-yellow-300' :
-                              'bg-orange-900/40 text-orange-300'
+                              eq.status === 'ACTIVE' ? 'bg-green-900/40 text-green-300' :
+                              eq.status === 'MAINTENANCE' ? 'bg-yellow-900/40 text-yellow-300' :
+                              eq.status === 'INACTIVE' ? 'bg-gray-900/40 text-gray-300' :
+                              'bg-red-900/40 text-red-300'
                             }`}>
-                              {m.status === 'OPEN' ? 'Aberto' :
-                               m.status === 'IN_PROGRESS' ? 'Em curso' : 'Aguarda peças'}
+                              {eq.status === 'ACTIVE' ? 'Ativo' :
+                               eq.status === 'MAINTENANCE' ? 'Manutenção' :
+                               eq.status === 'INACTIVE' ? 'Inativo' :
+                               eq.status === 'RETIRED' ? 'Reformado' :
+                               eq.status === 'LOST' ? 'Perdido' : 'Roubado'}
                             </span>
-                          </div>
+                          </button>
                         ))}
-                      {assistanceRequests
-                        .filter((a) => a.roomId === rws.room.id && OPEN_REQUEST_STATUSES.includes(a.status))
-                        .map((a) => (
-                          <div key={a.id} className="flex items-center gap-2 text-xs">
-                            <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
-                            <span className="truncate">{a.title}</span>
-                            <span className="ml-auto flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-900/40 text-blue-300">
-                              {a.status === 'PENDING' ? 'Pendente' : 'Em curso'}
-                            </span>
-                          </div>
-                        ))}
+                      </div>
                     </div>
+                  )}
+
+                  {/* Open incidents */}
+                  {rws.openTickets === 0 && rws.openRequestCount === 0 ? (
+                    <div className="text-slate-400 text-sm flex items-center gap-1.5">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      Sem ocorrências abertas
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-1">Ocorrências Abertas</div>
+                      <div className="space-y-0.5">
+                        {maintenance
+                          .filter((m) => rws.roomEquipment.some((e) => e.id === m.equipmentId) && OPEN_MAINTENANCE_STATUSES.includes(m.status))
+                          .map((m) => (
+                            <button
+                              key={m.id}
+                              onClick={(e) => { e.stopPropagation(); handleMaintenanceClick(m.id); }}
+                              className="w-full flex items-center gap-2 text-xs hover:bg-slate-700 rounded px-1.5 py-0.5 -mx-1.5 transition-colors group/maint"
+                            >
+                              {CRITICAL_PRIORITIES.includes(m.priority)
+                                ? <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                                : <Wrench className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              }
+                              <span className="truncate group-hover/maint:underline">{m.title}</span>
+                              <span className={`ml-auto flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                m.status === 'OPEN' ? 'bg-blue-900/40 text-blue-300' :
+                                m.status === 'IN_PROGRESS' ? 'bg-yellow-900/40 text-yellow-300' :
+                                'bg-orange-900/40 text-orange-300'
+                              }`}>
+                                {m.status === 'OPEN' ? 'Aberto' :
+                                 m.status === 'IN_PROGRESS' ? 'Em curso' : 'Aguarda peças'}
+                              </span>
+                            </button>
+                          ))}
+                        {assistanceRequests
+                          .filter((a) => a.roomId === rws.room.id && OPEN_REQUEST_STATUSES.includes(a.status))
+                          .map((a) => (
+                            <button
+                              key={a.id}
+                              onClick={(e) => { e.stopPropagation(); handleRequestClick(a.id); }}
+                              className="w-full flex items-center gap-2 text-xs hover:bg-slate-700 rounded px-1.5 py-0.5 -mx-1.5 transition-colors group/req"
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
+                              <span className="truncate group-hover/req:underline">{a.title}</span>
+                              <span className="ml-auto flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-900/40 text-blue-300">
+                                {a.status === 'PENDING' ? 'Pendente' : 'Em curso'}
+                              </span>
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Footer hint */}
+                  <div className="pt-1 border-t border-slate-700 text-[10px] text-slate-500 text-center">
+                    Clique num item para abrir • Clique na sala para ver detalhes
                   </div>
-                )}
-              </div>
-            );
-          })()}
+                </div>
+              );
+            })()}
+          </div>
         </Tooltip>
       )}
     </div>

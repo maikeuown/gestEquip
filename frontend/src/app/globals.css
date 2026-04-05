@@ -32,3 +32,11 @@
 .sidebar-item { @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer text-sm font-medium; }
 .sidebar-item.active { @apply bg-primary-600 text-white; }
 .sidebar-item svg { @apply w-5 h-5 flex-shrink-0; }
+
+/* ── Sidebar custom scrollbar ── */
+.sidebar-nav::-webkit-scrollbar { width: 5px; }
+.sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.4); border-radius: 999px; }
+.sidebar-nav::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.7); }
+/* Firefox scrollbar */
+.sidebar-nav { scrollbar-width: thin; scrollbar-color: rgba(100, 116, 139, 0.4) transparent; }

@@ -70,7 +70,7 @@ export default function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+      <nav className="sidebar-nav flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {navItems.map(({ href, icon: Icon, label, roles }: any) =>
           (!roles || roles.includes(user?.role)) && (
             <Link key={href} href={href} className={clsx('sidebar-item', isActive(href) && 'active')}>

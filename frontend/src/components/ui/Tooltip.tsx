@@ -6,9 +6,10 @@ interface TooltipProps {
   targetRef: React.RefObject<HTMLElement | null>;
   children: React.ReactNode;
   visible: boolean;
+  interactive?: boolean;
 }
 
-export default function Tooltip({ targetRef, children, visible }: TooltipProps) {
+export default function Tooltip({ targetRef, children, visible, interactive = false }: TooltipProps) {
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -26,16 +27,13 @@ export default function Tooltip({ targetRef, children, visible }: TooltipProps) 
       const viewportW = window.innerWidth;
       const viewportH = window.innerHeight;
 
-      // Default: position below the target, centered horizontally
       let top = rect.bottom + 8;
       let left = rect.left + rect.width / 2 - tooltipRect.width / 2;
 
-      // Flip up if near bottom edge
       if (top + tooltipRect.height > viewportH - 16) {
         top = rect.top - tooltipRect.height - 8;
       }
 
-      // Clamp horizontally
       if (left < 8) left = 8;
       if (left + tooltipRect.width > viewportW - 8) {
         left = viewportW - tooltipRect.width - 8;
@@ -58,8 +56,11 @@ export default function Tooltip({ targetRef, children, visible }: TooltipProps) 
   return createPortal(
     <div
       ref={tooltipRef}
-      className="fixed z-[9999] bg-slate-900 text-white text-sm rounded-lg shadow-xl border border-slate-700 p-3 max-w-sm pointer-events-none"
+      className={`fixed z-[9999] bg-slate-900 text-white text-sm rounded-lg shadow-xl border border-slate-700 p-3 max-w-sm ${
+        interactive ? 'pointer-events-auto' : 'pointer-events-none'
+      }`}
       style={{ top: position.top, left: position.left }}
+      onClick={(e) => e.stopPropagation()}
     >
       {children}
     </div>,
