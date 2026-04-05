@@ -13,8 +13,8 @@ function getSocketUrl(): string {
   return '/';
 }
 
-// On Vercel serverless, WebSocket transport always fails (no persistent connections).
-// Only use polling in production — it works with serverless.
+// On Vercel serverless, WebSocket transport fails (no persistent connections).
+// Use polling-only in production — it works with serverless HTTP.
 function isProduction(): boolean {
   return typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 }
@@ -27,6 +27,7 @@ export function useSocket() {
     if (!isAuthenticated || !accessToken || !user) return;
 
     const url = getSocketUrl();
+    const prod = isProduction();
 
     if (socketInstance && currentSocketUrl !== url) {
       socketInstance.disconnect();
@@ -36,23 +37,31 @@ export function useSocket() {
     }
 
     if (!socketInstance) {
-      const transports: ('polling' | 'websocket')[] = isProduction() ? ['polling'] : ['polling', 'websocket'];
-
       socketInstance = io(url, {
         auth: { token: accessToken },
-        transports,
+        // Production: polling only (serverless can't sustain WebSocket)
+        // Dev: polling first, then try websocket upgrade
+        transports: prod ? ['polling'] : ['polling', 'websocket'],
+        // Disable upgrade attempt in production
+        upgrade: !prod,
+        // Reconnection with exponential backoff
         reconnection: true,
-        reconnectionAttempts: 3,
-        reconnectionDelay: 2000,
-        reconnectionDelayMax: 5000,
-        timeout: 8000,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 15000,
+        timeout: 15000,
         forceNew: true,
-        upgrade: !isProduction(),
+        // Suppress debug output
+        autoConnect: true,
       });
 
-      // Completely suppress Socket.io error logs — HTTP presence handles everything
+      // Suppress ALL engine-level and connection errors — HTTP presence is primary
       socketInstance.io.engine.on('error', () => {});
+      socketInstance.io.engine.on('packet', () => {});
       socketInstance.on('connect_error', () => {});
+      socketInstance.on('reconnect_error', () => {});
+      socketInstance.on('reconnect_attempt', () => {});
+      socketInstance.on('reconnect_failed', () => {});
 
       socketInstance.on('connect', () => {
         socketInstance!.emit('presence:join', {

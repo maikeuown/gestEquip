@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuthStore } from '@/store/auth';
-import { useSocket, getSocket } from './useSocket';
+import { useSocket } from './useSocket';
 import api from '@/lib/api/client';
 
 export interface ChatPeer {
@@ -19,12 +19,6 @@ export interface ChatMessage {
   isOwn?: boolean;
 }
 
-// Check if WebSocket is actually connected and working
-function isWsConnected(): boolean {
-  const s = getSocket();
-  return !!s && s.connected;
-}
-
 export function useChat() {
   const { user, accessToken } = useAuthStore();
   const socket = useSocket();
@@ -33,51 +27,59 @@ export function useChat() {
   const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
   const [openConversations, setOpenConversations] = useState<Set<string>>(new Set());
   const [peerDisconnected, setPeerDisconnected] = useState<Set<string>>(new Set());
-  const [useHttpPresence, setUseHttpPresence] = useState(false);
-  const httpPresenceRef = useRef<{ polling: boolean; heartbeat: boolean }>({ polling: false, heartbeat: false });
 
-  // HTTP-based presence: heartbeat + polling (fallback for serverless)
+  // ============================================================
+  // HTTP PRESENCE (primary — works on Vercel serverless)
+  // ============================================================
+
+  // Heartbeat every 10s to keep user marked online in DB
   useEffect(() => {
     if (!user || !accessToken) return;
 
-    // Send heartbeat every 10s
+    // Initial heartbeat immediately
+    api.post('/presence/heartbeat').catch(() => {});
+
+    // Repeat every 10 seconds
     const heartbeatInterval = setInterval(() => {
       api.post('/presence/heartbeat').catch(() => {});
     }, 10000);
 
-    // Initial heartbeat
-    api.post('/presence/heartbeat').catch(() => {});
-
     return () => clearInterval(heartbeatInterval);
   }, [user, accessToken]);
 
-  // HTTP presence polling (always active as primary or fallback)
+  // Poll online peers every 3 seconds
   useEffect(() => {
     if (!user || !accessToken) return;
 
+    let cancelled = false;
+
     const pollPeers = async () => {
       try {
-        const data = await api.get('/presence/online');
-        const peers: ChatPeer[] = Array.isArray(data) ? data : [];
-        setOnlinePeers(peers);
+        const peers: ChatPeer[] = await api.get('/presence/online');
+        if (cancelled) return;
+        const arr = Array.isArray(peers) ? peers : [];
+        setOnlinePeers(arr);
+        // Clear "disconnected" flag for peers that just came back
         setPeerDisconnected((prev) => {
           const next = new Set(prev);
-          for (const p of peers) next.delete(p.userId);
+          for (const p of arr) next.delete(p.userId);
           return next;
         });
       } catch {
-        // Silently fail — will retry
+        // Silently fail — next poll will retry
       }
     };
 
-    // Poll every 3 seconds
     pollPeers();
     const interval = setInterval(pollPeers, 3000);
 
-    return () => clearInterval(interval);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [user, accessToken]);
 
-  // WebSocket presence (only when socket is connected — local dev)
+  // ============================================================
+  // WEBSOCKET PRESENCE (supplementary — local dev only)
+  // ============================================================
+
   useEffect(() => {
     if (!socket || !user) return;
 
@@ -97,11 +99,7 @@ export function useChat() {
       socket.once('connect', tryJoin);
     }
 
-    // If WebSocket connects successfully, use it for presence
-    const onWsConnect = () => {
-      setUseHttpPresence(false);
-      tryJoin();
-    };
+    const onWsConnect = () => { tryJoin(); };
 
     const onWsPresenceList = (peers: ChatPeer[]) => {
       setOnlinePeers(peers);
@@ -139,11 +137,13 @@ export function useChat() {
       socket.off('presence:list', onWsPresenceList);
       socket.off('presence:joined', onWsPresenceJoined);
       socket.off('presence:left', onWsPresenceLeft);
-      socket.off('connect', tryJoin);
     };
   }, [socket, user]);
 
-  // Receive messages (WebSocket — only works when connected)
+  // ============================================================
+  // MESSAGES (WebSocket — supplementary)
+  // ============================================================
+
   useEffect(() => {
     if (!socket || !user) return;
 
@@ -171,12 +171,15 @@ export function useChat() {
     return () => { socket.off('message:receive', onMessageReceive); };
   }, [socket, user]);
 
+  // ============================================================
+  // ACTIONS
+  // ============================================================
+
   const sendMessage = useCallback(
     (toUserId: string, content: string) => {
       if (!socket || !user) return;
       socket.emit('message:send', { toUserId, content });
 
-      // Add to own conversation immediately
       setConversations((prev) => {
         const next = new Map(prev);
         const existing = next.get(toUserId) || [];
@@ -198,7 +201,6 @@ export function useChat() {
 
   const openConversation = useCallback((userId: string) => {
     setOpenConversations((prev) => new Set(prev).add(userId));
-    // Mark as read
     setUnreadCounts((prev) => {
       const next = new Map(prev);
       next.set(userId, 0);
@@ -216,9 +218,7 @@ export function useChat() {
 
   const getTotalUnread = useCallback(() => {
     let total = 0;
-    unreadCounts.forEach((count) => {
-      total += count;
-    });
+    unreadCounts.forEach((count) => { total += count; });
     return total;
   }, [unreadCounts]);
 

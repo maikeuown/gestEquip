@@ -27,7 +27,18 @@ const ALLOWED_PEERS: Record<string, string[]> = {
   STAFF: ['TECHNICIAN'],
 };
 
-@WebSocketGateway({ cors: { origin: '*' }, namespace: '/' })
+@WebSocketGateway({
+  cors: { origin: '*' },
+  namespace: '/',
+  // Vercel serverless: longer ping interval reduces disconnect attempts
+  // Default is 25s/2s — bump to 30s/10s to avoid false disconnects
+  pingInterval: 30000,
+  pingTimeout: 10000,
+  // Allow both transports — client decides
+  transports: ['polling', 'websocket'],
+  // Allow up to 3 retries for slow connections
+  allowEIO3: true,
+})
 export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
   private logger = new Logger('WebsocketGateway');
@@ -71,6 +82,7 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
       for (const peer of peers) {
         this.server.to(`user:${peer.userId}`).emit('presence:left', { userId: entry.userId });
       }
+      this.logger.log(`Presence removed: ${entry.name} (${entry.role}), socket ${client.id}`);
     }
 
     this.logger.log(`Client disconnected: ${client.id}`);
