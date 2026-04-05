@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, RealtimeChannel } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -17,18 +17,36 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+// ── Channel singleton ──
+// Assigned by ChatProvider on first mount. Read via getChatChannel().
+
+let _chatChannel: RealtimeChannel | null = null;
+
 /**
- * Create a fresh Supabase channel for the global chat.
- * Called ONCE inside the hook — never at module level.
+ * Get (or create) the singleton chat channel.
  *
- * NOTE: Each call returns a NEW channel instance.
- * The caller MUST subscribe exactly once and clean up with removeChannel().
+ * supabase.channel(name) returns a cached instance by name. After
+ * supabase.removeChannel() the name is freed and a new call creates
+ * a fresh instance.
+ *
+ * Always call this — never call supabase.channel('chat:global') directly.
  */
-export function createChatChannel() {
-  return supabase.channel('chat:global', {
+export function getChatChannel(): RealtimeChannel {
+  if (_chatChannel) return _chatChannel;
+  _chatChannel = supabase.channel('chat:global', {
     config: {
       presence: { key: 'chat' },
       broadcast: { ack: true },
     },
   });
+  return _chatChannel;
+}
+
+/**
+ * Reset the singleton reference. Call this during logout cleanup
+ * AFTER supabase.removeChannel() so the next getChatChannel() creates
+ * a brand-new instance.
+ */
+export function resetChatChannel() {
+  _chatChannel = null;
 }
