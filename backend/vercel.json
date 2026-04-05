@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "npx prisma@5 generate --schema=./prisma/schema.prisma && npm run build",
+  "buildCommand": "rm -rf node_modules/@prisma/client && npx prisma@5 generate --schema=./prisma/schema.prisma && npm run build",
   "outputDirectory": ".",
   "functions": {
     "api/index.ts": {
