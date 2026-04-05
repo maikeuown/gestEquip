@@ -6,6 +6,7 @@ import { roomsApi, equipmentApi, maintenanceApi, assistanceRequestsApi } from '@
 import {
   Wrench, AlertTriangle, Monitor, CheckCircle, XCircle, ExternalLink,
   ChevronDown, ChevronRight, GripVertical, Pencil, Trash2, ArrowUpDown, Building2,
+  Keyboard, Mouse, Monitor as MonitorIcon, Printer, Projector, Server, Network, Package,
 } from 'lucide-react';
 
 // ── Types ──
@@ -27,6 +28,9 @@ interface Equipment {
   roomId: string | null;
   status: string;
   institutionId: string;
+  parentId: string | null;
+  category: string | null;
+  peripherals?: Equipment[];
   [key: string]: unknown;
 }
 
@@ -119,6 +123,77 @@ function getCardBorder(cat: RoomWithStatus['statusCategory']): string {
   }
 }
 
+// ── Equipment category helpers ──
+
+const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  DESKTOP: MonitorIcon,
+  MONITOR: Monitor,
+  MOUSE: Mouse,
+  KEYBOARD: Keyboard,
+  PRINTER: Printer,
+  PROJECTOR: Projector,
+  SERVER: Server,
+  NETWORK: Network,
+};
+
+function getCategoryIcon(cat: string | null): React.ComponentType<{ className?: string }> {
+  if (!cat) return Package;
+  return CATEGORY_ICONS[cat.toUpperCase()] || Package;
+}
+
+function getCategoryLabel(cat: string | null): string {
+  if (!cat) return 'Outro';
+  const labels: Record<string, string> = {
+    DESKTOP: 'Computador', MONITOR: 'Monitor', MOUSE: 'Rato', KEYBOARD: 'Teclado',
+    PRINTER: 'Impressora', PROJECTOR: 'Projetor', SERVER: 'Servidor', NETWORK: 'Rede',
+    OTHER: 'Outro',
+  };
+  return labels[cat.toUpperCase()] || 'Outro';
+}
+
+// Subtle status backgrounds for expanded equipment rows
+function getStatusBg(status: string): string {
+  switch (status) {
+    case 'ACTIVE': return 'bg-green-50/80';
+    case 'MAINTENANCE': return 'bg-yellow-50/80';
+    case 'INACTIVE': return 'bg-gray-50/80';
+    default: return 'bg-red-50/80';
+  }
+}
+
+function getStatusTextColor(status: string): string {
+  switch (status) {
+    case 'ACTIVE': return 'text-green-800';
+    case 'MAINTENANCE': return 'text-yellow-800';
+    case 'INACTIVE': return 'text-gray-600';
+    default: return 'text-red-800';
+  }
+}
+
+function getStatusBadge(status: string): string {
+  switch (status) {
+    case 'ACTIVE': return 'bg-green-100 text-green-700';
+    case 'MAINTENANCE': return 'bg-yellow-100 text-yellow-700';
+    case 'INACTIVE': return 'bg-gray-100 text-gray-600';
+    case 'RETIRED': return 'bg-slate-100 text-slate-600';
+    case 'LOST': return 'bg-red-100 text-red-700';
+    case 'STOLEN': return 'bg-red-100 text-red-700';
+    default: return 'bg-gray-100 text-gray-600';
+  }
+}
+
+function getStatusLabel(status: string): string {
+  switch (status) {
+    case 'ACTIVE': return 'Ativo';
+    case 'MAINTENANCE': return 'Manut.';
+    case 'INACTIVE': return 'Inativo';
+    case 'RETIRED': return 'Reform.';
+    case 'LOST': return 'Perdido';
+    case 'STOLEN': return 'Roubado';
+    default: return status;
+  }
+}
+
 // ── Page ──
 
 export default function DiagramaEdificio() {
@@ -140,6 +215,8 @@ export default function DiagramaEdificio() {
 
   // Expanded room details (click-to-expand inline)
   const [expandedRoom, setExpandedRoom] = useState<string | null>(null);
+  // Expanded equipment (3rd level — peripherals under a desktop)
+  const [expandedEquip, setExpandedEquip] = useState<string | null>(null);
 
   // Drag-and-drop
   const [draggedRoomId, setDraggedRoomId] = useState<string | null>(null);
@@ -645,41 +722,77 @@ export default function DiagramaEdificio() {
                           </div>
                         </div>
 
-                        {/* Expanded detail section — compact, tooltip-density */}
+                        {/* Expanded detail section — light bg, subtle colors */}
                         {isExpanded && (
-                          <div className="bg-slate-900 text-white text-xs rounded-b-lg border-2 border-t-0 border-slate-700 px-3 py-2 -mt-px space-y-1.5 animate-in fade-in">
+                          <div className="rounded-b-lg border-2 border-t-0 border-slate-200 px-3 py-2 -mt-px space-y-1 animate-in fade-in bg-white">
                             {/* Equipment list */}
                             {rws.roomEquipment.length === 0 ? (
-                              <div className="flex items-center gap-1.5 text-slate-400">
+                              <div className="flex items-center gap-1.5 text-slate-400 text-xs">
                                 <XCircle className="w-3.5 h-3.5 flex-shrink-0" />
                                 <span>Sem equipamentos</span>
                               </div>
                             ) : (
                               <div>
-                                <div className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide mb-0.5">Equipamentos</div>
-                                {rws.roomEquipment.map((eq) => (
-                                  <button
-                                    key={eq.id}
-                                    data-nav
-                                    onClick={(e) => { e.stopPropagation(); handleEquipmentClick(eq.id); }}
-                                    className="w-full flex items-center gap-2 text-xs hover:bg-slate-700 rounded px-1 py-0.5 -mx-1 transition-colors group/eq"
-                                  >
-                                    <Monitor className="w-3 h-3 text-slate-400 flex-shrink-0" />
-                                    <span className="truncate group-hover/eq:underline">{eq.name}</span>
-                                    <span className={`ml-auto flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                      eq.status === 'ACTIVE' ? 'bg-green-900/40 text-green-300' :
-                                      eq.status === 'MAINTENANCE' ? 'bg-yellow-900/40 text-yellow-300' :
-                                      eq.status === 'INACTIVE' ? 'bg-gray-900/40 text-gray-300' :
-                                      'bg-red-900/40 text-red-300'
-                                    }`}>
-                                      {eq.status === 'ACTIVE' ? 'Ativo' :
-                                       eq.status === 'MAINTENANCE' ? 'Manut.' :
-                                       eq.status === 'INACTIVE' ? 'Inativo' :
-                                       eq.status === 'RETIRED' ? 'Reform.' :
-                                       eq.status === 'LOST' ? 'Perdido' : 'Roubado'}
-                                    </span>
-                                  </button>
-                                ))}
+                                <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-0.5">Equipamentos</div>
+                                {rws.roomEquipment.map((eq) => {
+                                  const eqPeripherals = rws.roomEquipment.filter((e) => (e as any).parentId === eq.id);
+                                  const isEqExpanded = expandedEquip === eq.id;
+                                  const Icon = getCategoryIcon(eq.category);
+                                  const hasPeripherals = eqPeripherals.length > 0;
+
+                                  return (
+                                    <div key={eq.id}>
+                                      {/* Equipment row */}
+                                      <button
+                                        data-nav
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (hasPeripherals) {
+                                            setExpandedEquip((prev) => prev === eq.id ? null : eq.id);
+                                          } else {
+                                            handleEquipmentClick(eq.id);
+                                          }
+                                        }}
+                                        className={`w-full flex items-center gap-2 rounded px-1.5 py-1 transition-colors text-left ${hasPeripherals ? 'hover:bg-black/5 cursor-pointer' : 'hover:bg-black/5 cursor-pointer'}`}
+                                      >
+                                        <Icon className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+                                        <span className="truncate text-xs text-slate-700 font-medium">{eq.name}</span>
+                                        {hasPeripherals && (
+                                          <span className="ml-auto flex-shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 flex items-center gap-0.5">
+                                            {eqPeripherals.length}
+                                            {isEqExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                          </span>
+                                        )}
+                                        <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(eq.status)}`}>
+                                          {getStatusLabel(eq.status)}
+                                        </span>
+                                      </button>
+
+                                      {/* Peripherals (3rd level) */}
+                                      {hasPeripherals && isEqExpanded && (
+                                        <div className="ml-5 pl-3 border-l-2 border-slate-200 space-y-0.5 py-0.5 animate-in fade-in">
+                                          {eqPeripherals.map((periph) => {
+                                            const PIcon = getCategoryIcon(periph.category);
+                                            return (
+                                              <button
+                                                key={periph.id}
+                                                data-nav
+                                                onClick={(e) => { e.stopPropagation(); handleEquipmentClick(periph.id); }}
+                                                className="w-full flex items-center gap-2 rounded px-1.5 py-0.5 hover:bg-black/5 transition-colors text-left"
+                                              >
+                                                <PIcon className="w-3 h-3 text-slate-300 flex-shrink-0" />
+                                                <span className="truncate text-[11px] text-slate-500">{periph.name}</span>
+                                                <span className={`ml-auto flex-shrink-0 px-1 py-0.5 rounded text-[9px] font-medium ${getStatusBadge(periph.status)}`}>
+                                                  {getStatusLabel(periph.status)}
+                                                </span>
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
 
@@ -695,7 +808,7 @@ export default function DiagramaEdificio() {
 
                               if (roomMaint.length === 0 && roomRequests.length === 0) {
                                 return (
-                                  <div className="flex items-center gap-1.5 text-slate-400">
+                                  <div className="flex items-center gap-1.5 text-slate-400 text-xs">
                                     <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
                                     <span>Sem ocorrências abertas</span>
                                   </div>
@@ -704,42 +817,47 @@ export default function DiagramaEdificio() {
 
                               return (
                                 <div>
-                                  <div className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide mb-0.5">Ocorrências</div>
-                                  {roomMaint.map((m) => (
-                                    <button
-                                      key={m.id}
-                                      data-nav
-                                      onClick={(e) => { e.stopPropagation(); handleMaintenanceClick(m.id); }}
-                                      className="w-full flex items-center gap-2 text-xs hover:bg-slate-700 rounded px-1 py-0.5 -mx-1 transition-colors group/maint"
-                                    >
-                                      {CRITICAL_PRIORITIES.includes(m.priority)
-                                        ? <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
-                                        : <Wrench className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                                      }
-                                      <span className="truncate group-hover/maint:underline">{m.title}</span>
-                                      <span className={`ml-auto flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                        m.status === 'OPEN' ? 'bg-blue-900/40 text-blue-300' :
-                                        m.status === 'IN_PROGRESS' ? 'bg-yellow-900/40 text-yellow-300' :
-                                        'bg-orange-900/40 text-orange-300'
-                                      }`}>
-                                        {m.status === 'OPEN' ? 'Aberto' : m.status === 'IN_PROGRESS' ? 'Em curso' : 'Aguarda peças'}
-                                      </span>
-                                    </button>
-                                  ))}
-                                  {roomRequests.map((a) => (
-                                    <button
-                                      key={a.id}
-                                      data-nav
-                                      onClick={(e) => { e.stopPropagation(); handleRequestClick(a.id); }}
-                                      className="w-full flex items-center gap-2 text-xs hover:bg-slate-700 rounded px-1 py-0.5 -mx-1 transition-colors group/req"
-                                    >
-                                      <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
-                                      <span className="truncate group-hover/req:underline">{a.title}</span>
-                                      <span className="ml-auto flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-900/40 text-blue-300">
-                                        {a.status === 'PENDING' ? 'Pendente' : 'Em curso'}
-                                      </span>
-                                    </button>
-                                  ))}
+                                  <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-0.5">Ocorrências</div>
+                                  <div className="space-y-0.5">
+                                    {roomMaint.map((m) => {
+                                      const bg = m.priority === 'CRITICAL' || m.priority === 'HIGH' ? 'bg-red-50/80' : 'bg-yellow-50/80';
+                                      return (
+                                        <button
+                                          key={m.id}
+                                          data-nav
+                                          onClick={(e) => { e.stopPropagation(); handleMaintenanceClick(m.id); }}
+                                          className={`w-full flex items-center gap-2 rounded px-1.5 py-1 transition-colors text-left ${bg}`}
+                                        >
+                                          {CRITICAL_PRIORITIES.includes(m.priority)
+                                            ? <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+                                            : <Wrench className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                          }
+                                          <span className="truncate text-xs text-slate-700">{m.title}</span>
+                                          <span className={`ml-auto flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                            m.status === 'OPEN' ? 'bg-blue-100 text-blue-700' :
+                                            m.status === 'IN_PROGRESS' ? 'bg-yellow-100 text-yellow-700' :
+                                            'bg-orange-100 text-orange-700'
+                                          }`}>
+                                            {m.status === 'OPEN' ? 'Aberto' : m.status === 'IN_PROGRESS' ? 'Em curso' : 'Aguarda peças'}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                    {roomRequests.map((a) => (
+                                      <button
+                                        key={a.id}
+                                        data-nav
+                                        onClick={(e) => { e.stopPropagation(); handleRequestClick(a.id); }}
+                                        className="w-full flex items-center gap-2 rounded px-1.5 py-1 bg-yellow-50/80 transition-colors text-left"
+                                      >
+                                        <AlertTriangle className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" />
+                                        <span className="truncate text-xs text-slate-700">{a.title}</span>
+                                        <span className="ml-auto flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700">
+                                          {a.status === 'PENDING' ? 'Pendente' : 'Em curso'}
+                                        </span>
+                                      </button>
+                                    ))}
+                                  </div>
                                 </div>
                               );
                             })()}

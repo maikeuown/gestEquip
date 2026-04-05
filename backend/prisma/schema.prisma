@@ -175,6 +175,11 @@ model Equipment {
   room               Room?               @relation(fields: [roomId], references: [id])
   maintenanceTickets MaintenanceTicket[]
   movements          Movement[]
+  // Equipment hierarchy: peripherals attached to parent desktop
+  parentId           String?           @map("parent_id")
+  category           EquipCategory?
+  parent             Equipment?        @relation("EquipmentHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  peripherals        Equipment[]       @relation("EquipmentHierarchy")
 
   @@map("equipment")
 }
@@ -414,6 +419,18 @@ enum EquipmentStatus {
   RETIRED
   LOST
   STOLEN
+}
+
+enum EquipCategory {
+  DESKTOP
+  MONITOR
+  MOUSE
+  KEYBOARD
+  PRINTER
+  PROJECTOR
+  SERVER
+  NETWORK
+  OTHER
 }
 
 enum MaintenanceStatus {
