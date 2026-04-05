@@ -28,16 +28,26 @@ export function useChat() {
   const [peerDisconnected, setPeerDisconnected] = useState<Set<string>>(new Set());
   const initializedRef = useRef(false);
 
-  // Join presence on mount
+  // Join presence on mount — but ONLY after socket confirms it is connected
   useEffect(() => {
-    if (!socket || !user || initializedRef.current) return;
-    initializedRef.current = true;
+    if (!socket || !user) return;
 
-    socket.emit('presence:join', {
-      userId: user.id,
-      name: `${user.firstName} ${user.lastName}`,
-      role: user.role,
-    });
+    const tryJoin = () => {
+      if (initializedRef.current) return;
+      initializedRef.current = true;
+
+      socket.emit('presence:join', {
+        userId: user.id,
+        name: `${user.firstName} ${user.lastName}`,
+        role: user.role,
+      });
+    };
+
+    if (socket.connected) {
+      tryJoin();
+    } else {
+      socket.once('connect', tryJoin);
+    }
 
     // Listen for peer list
     socket.on('presence:list', (peers: ChatPeer[]) => {
@@ -94,6 +104,7 @@ export function useChat() {
     });
 
     return () => {
+      socket.off('connect', tryJoin);
       socket.off('presence:list');
       socket.off('presence:joined');
       socket.off('presence:left');

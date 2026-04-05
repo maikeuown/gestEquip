@@ -41,7 +41,8 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
   async handleConnection(client: Socket) {
     try {
       const token = client.handshake.auth.token || client.handshake.headers.authorization?.split(' ')[1];
-      if (!token) { client.disconnect(); return; }
+      this.logger.log(`Connection attempt: socket ${client.id}, token present: ${!!token}`);
+      if (!token) { this.logger.warn('No token provided, disconnecting'); client.disconnect(); return; }
       const payload = this.jwtService.verify(token, { secret: this.config.get('jwt.secret') });
       client.data.userId = payload.sub;
       client.data.institutionId = payload.institutionId;
@@ -49,8 +50,9 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
       client.join(`institution:${payload.institutionId}`);
       if (!this.userSockets.has(payload.sub)) this.userSockets.set(payload.sub, new Set());
       this.userSockets.get(payload.sub)!.add(client.id);
-      this.logger.log(`Client connected: ${client.id} (user: ${payload.sub})`);
-    } catch {
+      this.logger.log(`Client connected: ${client.id} (user: ${payload.sub}, institution: ${payload.institutionId})`);
+    } catch (err) {
+      this.logger.warn(`Connection failed for ${client.id}: ${err.message}`);
       client.disconnect();
     }
   }
@@ -81,14 +83,16 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
   ) {
     const entry: PresenceEntry = { userId: data.userId, name: data.name, role: data.role, socketId: client.id };
     this.presence.set(client.id, entry);
-    this.logger.log(`Presence: ${data.name} (${data.role}) joined`);
+    this.logger.log(`Presence: ${data.name} (${data.role}, userId=${data.userId}) joined on socket ${client.id}`);
 
     // Send filtered peer list to the joining user
     const peers = this.getFilteredPeers(data.userId, data.role);
+    this.logger.log(`Sending ${peers.length} peers to ${data.name}: ${peers.map(p => `${p.name}(${p.role})`).join(', ') || '(none)'}`);
     client.emit('presence:list', peers);
 
     // Broadcast to allowed peers that someone joined
     const broadcastTargets = this.getAllowedPeers(data.userId, data.role);
+    this.logger.log(`Broadcasting join to ${broadcastTargets.length} targets: ${broadcastTargets.map(p => `${p.name}(${p.role})`).join(', ') || '(none)'}`);
     for (const peer of broadcastTargets) {
       this.server.to(`user:${peer.userId}`).emit('presence:joined', {
         userId: data.userId,

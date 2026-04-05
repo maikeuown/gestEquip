@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Monitor, LayoutDashboard, Package, Wrench, ArrowLeftRight, ClipboardList,
-  Building2, Users, DoorOpen, Tag, BarChart3, Bell, LogOut, Settings, FileText, Shield
+  Building2, Users, DoorOpen, Tag, BarChart3, Bell, LogOut, Settings, FileText, Shield, Building
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { authApi } from '@/lib/api';
@@ -24,6 +24,7 @@ const navItems = [
   { href: '/assistance-requests', icon: ClipboardList, label: 'Pedidos Assistência', roles: ['TEACHER', 'STAFF'] },
   { href: '/equipment-types', icon: Tag, label: 'Tipos', roles: ['SUPER_ADMIN', 'ADMIN', 'TECHNICIAN'] },
   { href: '/reports', icon: BarChart3, label: 'Relatórios', roles: ['SUPER_ADMIN', 'ADMIN', 'TECHNICIAN'] },
+  { href: '/diagrama', icon: Building, label: 'Diagrama do Edifício', roles: ['SUPER_ADMIN', 'ADMIN', 'TECHNICIAN'] },
   { href: '/notifications', icon: Bell, label: 'Notificações', roles: ['SUPER_ADMIN', 'ADMIN', 'TECHNICIAN', 'TEACHER', 'STAFF'] },
 ];
 
